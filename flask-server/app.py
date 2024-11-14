@@ -17,7 +17,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Set your OpenAI API key
-openai.api_key = "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"
+openai.api_key = "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"
 # Directories to store uploaded files, analyses, and responses
 UPLOAD_FOLDER = "./uploads"
 ANALYSIS_FOLDER = "./analyses"
