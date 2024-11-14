@@ -1,0 +1,150 @@
+.analysis-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .icon-buttons {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .icon-buttons .MuiIconButton-root {
+    color: #1976d2;
+    transition: color 0.3s;
+  }
+  
+  .icon-buttons .MuiIconButton-root:hover {
+    color: #1565c0;
+  }
+  
+  .analysis-widget-card {
+    background: linear-gradient(135deg, #ffffff, #f4f6f8);
+    border-radius: 12px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+    padding: 30px;
+    max-width: 700px;
+    margin: 40px auto;
+    transition: transform 0.3s;
+  }
+  
+  .analysis-widget-card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .analysis-widget-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #333;
+  }
+  
+  .highlight-text {
+    color: #1976d2;
+  }
+  
+  .analysis-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 15px;
+  }
+  
+  .analysis-item {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    transition: box-shadow 0.3s;
+  }
+  
+  .analysis-item:hover {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  }
+  
+  .view-button {
+    border-color: #1976d2;
+    color: #1976d2;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 5px 10px;
+    transition: background-color 0.3s, color 0.3s;
+  }
+  
+  .view-button:hover {
+    background-color: #1976d2;
+    color: white;
+  }
+  
+  .delete-button {
+    border-color: #d32f2f;
+    color: #d32f2f;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 5px 10px;
+    transition: background-color 0.3s, color 0.3s;
+  }
+  
+  .delete-button:hover {
+    background-color: #d32f2f;
+    color: white;
+  }
+  
+  .analysis-content {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 20px;
+    overflow: auto;
+    max-height: 300px;
+    font-size: 0.9rem;
+    color: #495057;
+  }
+  
+  .analysis-content pre {
+    white-space: pre-wrap; /* Wrap long lines */
+    word-wrap: break-word; /* Break long words */
+    font-family: 'Courier New', Courier, monospace;
+    background-color: #f5f5f5;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  
+  .analysis-section {
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  
+  .analysis-category {
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .analysis-table-container {
+    margin-top: 10px;
+  }
+  
+  strong {
+    color: #333;
+  }
+
+  .icon-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  
+  .MuiIconButton-root {
+    transition: color 0.3s;
+  }
+  
+  .MuiIconButton-root:hover {
+    color: #1565c0;
+  }
+  
+  

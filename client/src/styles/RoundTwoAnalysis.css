@@ -1,0 +1,170 @@
+/* Container styling */
+.round-two-analysis-container {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  font-family: 'Roboto', sans-serif;
+  background-color: #f4f6f8;
+  color: #333;
+}
+
+/* Left panel with analysis list */
+.analysis-list-section {
+  flex: 1;
+  max-width: 320px;
+}
+
+.widget-title {
+  font-weight: 600;
+  text-align: center;
+  color: #444;
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+}
+
+/* Card styling for the list */
+.analysis-list-container {
+  padding: 15px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.section-title {
+  font-weight: 500;
+  color: #1976d2;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+/* Analysis item styling */
+.analysis-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #fafafa;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.analysis-item:hover {
+  background: #e3f2fd;
+}
+
+.view-button, .delete-button {
+  font-size: 0.9rem;
+  text-transform: none;
+}
+
+.view-button {
+  color: #1976d2;
+}
+
+.delete-button {
+  color: #f44336;
+}
+
+/* Analysis content section */
+.analysis-content-section {
+  flex: 2;
+}
+
+.analysis-content-container {
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.select-analysis-message,
+.no-analyses-message,
+.error-message {
+  color: #888;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Category table styling */
+.analysis-table-container {
+  margin-top: 10px;
+  background-color: #fafafa;
+  border-radius: 10px;
+  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.analysis-table-container table {
+  border-collapse: collapse;
+  width: 100%;
+  background-color: #fff;
+}
+
+.analysis-table-container th,
+.analysis-table-container td {
+  padding: 10px 15px;
+  text-align: left;
+}
+
+.analysis-table-container th {
+  background-color: #1976d2;
+  color: white;
+  font-weight: bold;
+}
+
+.analysis-table-container td {
+  border-top: 1px solid #ddd;
+}
+
+.analysis-table-container tr:hover td {
+  background-color: #f1f1f1;
+}
+
+.analysis-section {
+  margin-bottom: 25px;
+}
+
+/* Category headers */
+.analysis-section > h6 {
+  margin-bottom: 10px;
+  color: #1976d2;
+  font-weight: 600;
+}
+
+/* Button styles */
+.analysis-item button {
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.analysis-item button:hover {
+  color: #ffffff;
+}
+
+.view-button:hover {
+  background-color: #1976d2;
+}
+
+.delete-button:hover {
+  background-color: #f44336;
+}
+
+/* General table and card adjustments */
+.table-header {
+  font-weight: bold;
+  color: #333;
+  text-align: left;
+}
+.refresh-button {
+  display: block;
+  margin: 10px auto 20px;
+  width: 40%;
+  background-color: transparent;
+}
+.button-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+
+

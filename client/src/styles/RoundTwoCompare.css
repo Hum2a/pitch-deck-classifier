@@ -1,0 +1,32 @@
+.round-two-compare-container {
+    padding: 20px;
+  }
+  
+  .widget-title {
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #333;
+  }
+  
+  .ranked-list-container {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  .section-title {
+    font-weight: 600;
+    margin-bottom: 15px;
+    text-align: center;
+  }
+  
+  .ranked-table-container {
+    margin-top: 10px;
+  }
+  
+  .error-message {
+    color: red;
+    text-align: center;
+    margin-top: 10px;
+  }
+  

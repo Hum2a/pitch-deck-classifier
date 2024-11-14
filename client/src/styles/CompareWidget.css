@@ -1,0 +1,50 @@
+.compare-widget-card {
+    background: linear-gradient(135deg, #ffffff, #f4f6f8);
+    border-radius: 12px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+    padding: 30px;
+    max-width: 700px;
+    margin: 40px auto;
+    transition: transform 0.3s;
+  }
+  
+  .compare-widget-card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .compare-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .compare-widget-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #333;
+  }
+  
+  .highlight-text {
+    color: #1976d2;
+  }
+  
+  .overview-section {
+    background-color: #f0f0f0;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  
+  .expanded-section {
+    margin-top: 10px;
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 8px;
+  }
+  
+  .expanded-category {
+    font-weight: bold;
+    color: #333;
+  }
+  
+  

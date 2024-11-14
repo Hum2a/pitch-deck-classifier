@@ -1,0 +1,13 @@
+.home-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 20px;
+    gap: 20px;
+  }
+  
+  .home-container > * {
+    flex: 1; /* This will make both components take equal width */
+    max-width: 48%; /* Adjust the max-width as needed to create space between the components */
+  }
+  
