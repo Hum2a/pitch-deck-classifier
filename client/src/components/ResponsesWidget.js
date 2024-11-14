@@ -3,6 +3,7 @@ import { IconButton, Typography, Button, Tooltip } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
+import apiUrl from '../config'; // Import apiUrl
 import PopUpModal from './PopUpModal'; // Import the PopUpModal component
 import '../styles/ResponsesWidget.css';
 
@@ -20,7 +21,7 @@ const ResponsesWidget = () => {
 
   const fetchResponses = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/responses");
+      const response = await axios.get(`${apiUrl}/api/responses`);
       setResponses(response.data);
     } catch (error) {
       console.error("Error fetching responses:", error);
@@ -29,7 +30,7 @@ const ResponsesWidget = () => {
 
   const handleViewResponse = async (filename) => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/responses/${filename}`);
+      const response = await axios.get(`${apiUrl}/api/responses/${filename}`);
       setSelectedResponse(filename);
       setParsedResponse(response.data);
     } catch (error) {
@@ -46,7 +47,7 @@ const ResponsesWidget = () => {
   const handleDeleteResponse = async () => {
     try {
       if (filenameToDelete) {
-        await axios.delete(`http://localhost:5000/api/responses/${filenameToDelete}`);
+        await axios.delete(`${apiUrl}/api/responses/${filenameToDelete}`);
         setResponses((prevResponses) => prevResponses.filter((file) => file !== filenameToDelete));
         if (selectedResponse === filenameToDelete) {
           setSelectedResponse(null);
@@ -67,7 +68,7 @@ const ResponsesWidget = () => {
 
   const handleDeleteAllResponses = async () => {
     try {
-      await axios.delete("http://localhost:5000/api/responses"); // Assuming the endpoint deletes all responses
+      await axios.delete(`${apiUrl}/api/responses`); // Assuming the endpoint deletes all responses
       setResponses([]); // Clear the responses state
       setSelectedResponse(null); // Reset any selected response
       setParsedResponse({}); // Clear parsed response data

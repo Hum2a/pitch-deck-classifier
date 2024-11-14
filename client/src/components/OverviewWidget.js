@@ -3,6 +3,7 @@ import { IconButton, Typography, Button, Tooltip } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
+import apiUrl from '../config'; // Import apiUrl
 import PopUpModal from './PopUpModal'; // Import the PopUpModal component
 import '../styles/OverviewWidget.css';
 
@@ -20,7 +21,7 @@ const OverviewWidget = () => {
 
   const fetchOverviews = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/overviews");
+      const response = await axios.get(`${apiUrl}/api/overviews`);
       setOverviews(response.data);
     } catch (error) {
       console.error("Error fetching overviews:", error);
@@ -29,7 +30,7 @@ const OverviewWidget = () => {
 
   const handleViewOverview = async (filename) => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/overviews/${filename}`);
+      const response = await axios.get(`${apiUrl}/api/overviews/${filename}`);
       setSelectedOverview(filename);
       setParsedOverview(response.data);
     } catch (error) {
@@ -46,7 +47,7 @@ const OverviewWidget = () => {
   const handleDeleteOverview = async () => {
     try {
       if (filenameToDelete) {
-        await axios.delete(`http://localhost:5000/api/overviews/${filenameToDelete}`);
+        await axios.delete(`${apiUrl}/api/overviews/${filenameToDelete}`);
         setOverviews((prevOverviews) => prevOverviews.filter((file) => file !== filenameToDelete));
         if (selectedOverview === filenameToDelete) {
           setSelectedOverview(null);
@@ -67,7 +68,7 @@ const OverviewWidget = () => {
 
   const handleDeleteAllOverviews = async () => {
     try {
-      await axios.delete("http://localhost:5000/api/overviews"); // Assuming the endpoint deletes all overviews
+      await axios.delete(`${apiUrl}/api/overviews`); // Assuming the endpoint deletes all overviews
       setOverviews([]); // Clear the overviews state
       setSelectedOverview(null); // Reset any selected overview
       setParsedOverview({}); // Clear parsed overview data

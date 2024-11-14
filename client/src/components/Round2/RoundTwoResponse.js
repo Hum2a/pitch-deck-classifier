@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography, List, ListItem, ListItemText, Card, CardContent, Button, Paper } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import axios from 'axios';
+import apiUrl from '../../config'; // Import apiUrl
 import '../../styles/RoundTwoResponse.css';
 
 const RoundTwoResponses = () => {
@@ -13,7 +14,7 @@ const RoundTwoResponses = () => {
   // Fetch responses function
   const fetchResponses = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/r2_responses");
+      const response = await axios.get(`${apiUrl}/api/r2_responses`);
       setResponses(response.data);
       setError(null);
     } catch (error) {
@@ -38,7 +39,7 @@ const RoundTwoResponses = () => {
       setResponseContent(null); // Clear content before loading new file
 
       try {
-        const response = await axios.get(`http://localhost:5000/api/r2_responses/${filename}`);
+        const response = await axios.get(`${apiUrl}/api/r2_responses/${filename}`);
         setResponseContent(response.data);
         setError(null);
       } catch (error) {
@@ -50,7 +51,7 @@ const RoundTwoResponses = () => {
   // Handle response deletion
   const handleDeleteResponse = async (filename) => {
     try {
-      await axios.delete(`http://localhost:5000/api/r2_responses/${filename}`);
+      await axios.delete(`${apiUrl}/api/r2_responses/${filename}`);
       setResponses(responses.filter((file) => file !== filename));
       if (selectedResponse === filename) {
         setSelectedResponse(null);

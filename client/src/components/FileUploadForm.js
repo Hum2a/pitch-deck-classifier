@@ -3,6 +3,7 @@ import { Button, TextField, Typography, LinearProgress, IconButton, Tooltip } fr
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
+import apiUrl from '../config';
 import PopUpModal from './PopUpModal'; // Import the PopUpModal component
 import '../styles/FileUploadForm.css';
 
@@ -23,10 +24,10 @@ const FileUploadForm = () => {
 
   const fetchUploads = async () => {
     try {
-      const localResponse = await axios.get("http://localhost:5000/api/local-uploads");
+      const localResponse = await axios.get(`${apiUrl}/api/local-uploads`);
       setLocalUploads(localResponse.data);
 
-      const networkResponse = await axios.get("http://localhost:5000/api/uploads");
+      const networkResponse = await axios.get(`${apiUrl}/api/uploads`);
       setNetworkUploads(networkResponse.data);
     } catch (error) {
       console.error("Error fetching uploads:", error);
@@ -57,7 +58,7 @@ const FileUploadForm = () => {
 
       try {
         setLoadingProgress(0);
-        const response = await axios.post("http://localhost:5000/api/upload", formData, {
+        const response = await axios.post(`${apiUrl}/api/upload`, formData, {
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setLoadingProgress(percentCompleted);
@@ -88,7 +89,7 @@ const FileUploadForm = () => {
       setLoadingProgress(0);
       setMessage(`Analyzing ${filename}...`);
       const response = await axios.post(
-        "http://localhost:5000/api/analyze",
+        `${apiUrl}/api/analyze`,
         { filename },
         {
           onDownloadProgress: (progressEvent) => {
@@ -134,12 +135,12 @@ const FileUploadForm = () => {
   const handleDelete = async () => {
     try {
       if (deleteAll) {
-        await axios.delete("http://localhost:5000/api/uploads");
+        await axios.delete(`${apiUrl}/api/uploads`);
         setMessage("All files deleted successfully.");
         setLocalUploads([]);
         setNetworkUploads([]);
       } else if (filenameToDelete) {
-        await axios.delete(`http://localhost:5000/api/delete/${filenameToDelete}`);
+        await axios.delete(`${apiUrl}/api/delete/${filenameToDelete}`);
         setMessage(`Deleted ${filenameToDelete} successfully.`);
         setLocalUploads((prev) => prev.filter((upload) => upload.filename !== filenameToDelete));
         setNetworkUploads((prev) => prev.filter((upload) => upload.filename !== filenameToDelete));
@@ -227,7 +228,7 @@ const FileUploadForm = () => {
         {localUploads.map((upload, index) => (
           <li key={index} className="upload-item">
             <a
-              href={`http://localhost:5000/uploads/${upload.filename}`}
+              href={`${apiUrl}/uploads/${upload.filename}`}
               target="_blank"
               rel="noopener noreferrer"
               className="upload-link"

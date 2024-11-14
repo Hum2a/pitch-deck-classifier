@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography, List, ListItem, ListItemText, Card, CardContent, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import axios from 'axios';
+import apiUrl from '../../config'; // Import apiUrl
 import '../../styles/RoundTwoAnalysis.css';
 
 const RoundTwoAnalysis = () => {
@@ -13,7 +14,7 @@ const RoundTwoAnalysis = () => {
   // Function to fetch analyses
   const fetchAnalyses = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/r2_analyses");
+      const response = await axios.get(`${apiUrl}/api/r2_analyses`);
       setAnalyses(response.data);
       setError(null);
     } catch (error) {
@@ -36,7 +37,7 @@ const RoundTwoAnalysis = () => {
       setAnalysisContent(null);
 
       try {
-        const response = await axios.get(`http://localhost:5000/api/r2_analyses/${filename}`);
+        const response = await axios.get(`${apiUrl}/api/r2_analyses/${filename}`);
         setAnalysisContent(response.data.analysis);
         setError(null);
       } catch (error) {
@@ -48,7 +49,7 @@ const RoundTwoAnalysis = () => {
   // Delete selected analysis file
   const deleteAnalysis = async (filename) => {
     try {
-      await axios.delete(`http://localhost:5000/api/r2_analyses/${filename}`);
+      await axios.delete(`${apiUrl}/api/r2_analyses/${filename}`);
       setAnalyses((prevAnalyses) => prevAnalyses.filter((file) => file !== filename));
       if (selectedAnalysis === filename) {
         setSelectedAnalysis(null);

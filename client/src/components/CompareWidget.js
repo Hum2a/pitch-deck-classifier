@@ -17,6 +17,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import axios from 'axios';
+import apiUrl from '../config'; // Import apiUrl
 import '../styles/CompareWidget.css';
 
 const CompareWidget = () => {
@@ -31,13 +32,13 @@ const CompareWidget = () => {
 
   const fetchAndRankAnalyses = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/analyses");
+      const response = await axios.get(`${apiUrl}/api/analyses`);
       const analysesData = await Promise.all(
         response.data.map(async (filename) => {
-          const analysisResponse = await axios.get(`http://localhost:5000/api/analyses/${filename}`);
+          const analysisResponse = await axios.get(`${apiUrl}/api/analyses/${filename}`);
           const analysis = analysisResponse.data;
 
-          const overviewResponse = await axios.get(`http://localhost:5000/api/overviews/${filename.replace("_analysis", "_overview")}`);
+          const overviewResponse = await axios.get(`${apiUrl}/api/overviews/${filename.replace("_analysis", "_overview")}`);
           const overview = overviewResponse.data;
 
           const totalScore = calculateTotalScore(analysis);
@@ -74,7 +75,7 @@ const CompareWidget = () => {
       .map((data) => data.filename.replace("_analysis.json", ".pdf")); // Convert to original filename format
 
     try {
-      const response = await axios.post("http://localhost:5000/api/copy_successful_pitchdecks", { filenames: passingPitchDecks });
+      const response = await axios.post(`${apiUrl}/api/copy_successful_pitchdecks`, { filenames: passingPitchDecks });
       setMessage(response.data.message);
     } catch (error) {
       console.error("Error copying successful pitch decks:", error);

@@ -4,6 +4,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
 import PopUpModal from './PopUpModal'; // Import the PopupModal component
+import apiUrl from '../config'; // Import the apiUrl
 import '../styles/AnalysisWidget.css';
 
 const AnalysisWidget = () => {
@@ -21,7 +22,7 @@ const AnalysisWidget = () => {
 
   const fetchAnalyses = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/analyses");
+      const response = await axios.get(`${apiUrl}/api/analyses`);
       setAnalyses(response.data);
     } catch (error) {
       console.error("Error fetching analyses:", error);
@@ -30,7 +31,7 @@ const AnalysisWidget = () => {
 
   const handleViewAnalysis = async (filename) => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/analyses/${filename}`);
+      const response = await axios.get(`${apiUrl}/api/analyses/${filename}`);
       setSelectedAnalysis(filename);
       setParsedAnalysis(response.data);
     } catch (error) {
@@ -47,7 +48,7 @@ const AnalysisWidget = () => {
   const handleDeleteAnalysis = async () => {
     try {
       if (filenameToDelete) {
-        await axios.delete(`http://localhost:5000/api/analyses/${filenameToDelete}`);
+        await axios.delete(`${apiUrl}/api/analyses/${filenameToDelete}`);
         setAnalyses((prevAnalyses) => prevAnalyses.filter((file) => file !== filenameToDelete));
         if (selectedAnalysis === filenameToDelete) {
           setSelectedAnalysis(null);
@@ -68,7 +69,7 @@ const AnalysisWidget = () => {
 
   const handleDeleteAllAnalyses = async () => {
     try {
-      await axios.delete("http://localhost:5000/api/analyses"); // Assuming the endpoint deletes all analyses
+      await axios.delete(`${apiUrl}/api/analyses`); // Assuming the endpoint deletes all analyses
       setAnalyses([]); // Clear the analyses state
       setSelectedAnalysis(null); // Reset any selected analysis
       setParsedAnalysis({}); // Clear parsed analysis data

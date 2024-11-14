@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Typography, Button, CircularProgress, Card, CardContent, List, ListItem, ListItemText } from '@mui/material';
 import axios from 'axios';
+import apiUrl from '../../config'; // Import apiUrl
 import '../../styles/RoundTwoAnalyse.css';
 
 const RoundTwoAnalyse = () => {
@@ -12,7 +13,7 @@ const RoundTwoAnalyse = () => {
   useEffect(() => {
     const fetchPitchDecks = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/api/successful_pitchdecks");
+        const response = await axios.get(`${apiUrl}/api/successful_pitchdecks`);
         setPitchDecks(response.data.filenames);
       } catch (error) {
         setError("Failed to load successful pitch decks.");
@@ -27,7 +28,7 @@ const RoundTwoAnalyse = () => {
     setError(null);
 
     try {
-      await axios.post("http://localhost:5000/api/round_two_analysis", { filename });
+      await axios.post(`${apiUrl}/api/round_two_analysis`, { filename });
       setError(`Analysis complete for ${filename}.`);
     } catch (error) {
       setError(`Error analyzing ${filename}. Please try again.`);
@@ -39,7 +40,7 @@ const RoundTwoAnalyse = () => {
   // Handle delete pitch deck
   const handleDelete = async (filename) => {
     try {
-      await axios.delete(`http://localhost:5000/api/delete/${filename}`);
+      await axios.delete(`${apiUrl}/api/delete/${filename}`);
       setPitchDecks((prevDecks) => prevDecks.filter((deck) => deck !== filename));
       setError(`Deleted ${filename} successfully.`);
     } catch (error) {

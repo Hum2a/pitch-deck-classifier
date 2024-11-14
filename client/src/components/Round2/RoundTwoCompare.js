@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import axios from 'axios';
+import apiUrl from '../../config'; // Import apiUrl
 import '../../styles/RoundTwoCompare.css';
 
 const RoundTwoCompare = () => {
@@ -11,13 +12,13 @@ const RoundTwoCompare = () => {
   // Function to fetch and process analysis data
   const fetchAndRankPitchDecks = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/r2_analyses');
+      const response = await axios.get(`${apiUrl}/api/r2_analyses`);
       const filenames = response.data;
       const pitchDecks = [];
 
       // Fetch and process each pitch deck's analysis
       for (const filename of filenames) {
-        const { data } = await axios.get(`http://localhost:5000/api/r2_analyses/${filename}`);
+        const { data } = await axios.get(`${apiUrl}/api/r2_analyses/${filename}`);
         const totalScore = calculateTotalScore(data.analysis);
         pitchDecks.push({ filename, totalScore });
       }
