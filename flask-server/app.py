@@ -12,12 +12,17 @@ from urllib.parse import unquote
 import firebase_admin
 from firebase_admin import credentials, storage
 import tempfile
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load environment variables from .env file
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 
 app = Flask(__name__)
 CORS(app)
 
-# Set your OpenAI API key
-openai.api_key = "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"
 # Directories to store uploaded files, analyses, and responses
 UPLOAD_FOLDER = "./uploads"
 ANALYSIS_FOLDER = "./analyses"
