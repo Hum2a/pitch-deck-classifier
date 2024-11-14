@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Typography, List, ListItem, ListItemText, Card, CardContent, Button, Paper } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import axios from 'axios';
-import apiUrl from '../../config'; // Import apiUrl
+import { storage } from "../../firebaseconfig"; // Adjust path to your firebase config
+import {  ref, listAll, getDownloadURL, deleteObject } from 'firebase/storage';
 import '../../styles/RoundTwoResponse.css';
 
 const RoundTwoResponses = () => {
@@ -11,13 +11,17 @@ const RoundTwoResponses = () => {
   const [responseContent, setResponseContent] = useState(null);
   const [error, setError] = useState(null);
 
-  // Fetch the list of response files from Firebase
+  // Fetch list of response files from Firebase Storage
   const fetchResponses = async () => {
     try {
-      const response = await axios.get(`${apiUrl}/api/r2_responses`);
-      setResponses(response.data); // Populate the responses list
+      const responseRef = ref(storage, 'r2_responses/');
+      const responseList = await listAll(responseRef);
+
+      const filenames = responseList.items.map((item) => item.name); // Get file names
+      setResponses(filenames);
       setError(null);
     } catch (error) {
+      console.error("Error fetching response files:", error);
       setError("Failed to load responses.");
     }
   };
@@ -27,7 +31,7 @@ const RoundTwoResponses = () => {
     fetchResponses();
   }, []);
 
-  // Load the content of a selected response file from Firebase
+  // Load content of a selected response file
   const loadResponseContent = async (filename) => {
     if (selectedResponse === filename) {
       setSelectedResponse(null);
@@ -37,19 +41,25 @@ const RoundTwoResponses = () => {
       setResponseContent(null);
 
       try {
-        const response = await axios.get(`${apiUrl}/api/r2_responses/${filename}`);
-        setResponseContent(response.data); // Set the content of the selected response
+        const fileRef = ref(storage, `r2_responses/${filename}`);
+        const url = await getDownloadURL(fileRef);
+        const response = await fetch(url);
+        const data = await response.json(); // Assumes the file content is JSON
+        setResponseContent(data);
         setError(null);
       } catch (error) {
+        console.error(`Error loading content for ${filename}:`, error);
         setError(`Failed to load content for ${filename}.`);
       }
     }
   };
 
-  // Delete a response file from Firebase
+  // Delete a response file from Firebase Storage
   const handleDeleteResponse = async (filename) => {
     try {
-      await axios.delete(`${apiUrl}/api/r2_responses/${filename}`);
+      const fileRef = ref(storage, `r2_responses/${filename}`);
+      await deleteObject(fileRef);
+
       setResponses((prevResponses) => prevResponses.filter((file) => file !== filename));
       if (selectedResponse === filename) {
         setSelectedResponse(null);
@@ -57,6 +67,7 @@ const RoundTwoResponses = () => {
       }
       setError(null);
     } catch (error) {
+      console.error(`Error deleting ${filename}:`, error);
       setError(`Failed to delete ${filename}.`);
     }
   };
