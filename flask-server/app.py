@@ -293,6 +293,7 @@ def round_two_analysis():
 @app.route('/api/upload', methods=['POST'])
 def upload_pitch_deck():
     try:
+        # Check if 'file' is in request.files
         if 'file' not in request.files:
             return jsonify({"error": "No file part in the request"}), 400
 
@@ -300,18 +301,19 @@ def upload_pitch_deck():
         if file.filename == '':
             return jsonify({"error": "No selected file"}), 400
 
+        # Save file
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(file_path)
-        logging.info(f"File uploaded and saved to {file_path}")
+        file.save(file_path)  # This is where the file saves locally
 
+        # MongoDB entry
         collection.insert_one({
             "filename": file.filename,
             "analysis": None,
             "timestamp": datetime.now()
         })
+        logging.info(f"File uploaded successfully: {file_path}")
 
         return jsonify({"message": "File successfully uploaded"}), 200
-
     except Exception as e:
         logging.error(f"Error in file upload: {e}")
         return jsonify({"error": str(e)}), 500
