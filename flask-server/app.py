@@ -4,23 +4,20 @@ import openai
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pdfminer.high_level import extract_text
-from pymongo import MongoClient
 from datetime import datetime
 import re
 import logging
 import shutil
 from urllib.parse import unquote
+import firebase_admin
+from firebase_admin import credentials, storage
+import tempfile
 
 app = Flask(__name__)
 CORS(app)
 
-# MongoDB setup
-client = MongoClient("mongodb://localhost:27017/")
-db = client["pitch_deck_db"]
-collection = db["pitch_decks"]
-
 # Set your OpenAI API key
-openai.api_key = "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"
+openai.api_key = "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"
 
 # Directories to store uploaded files, analyses, and responses
 UPLOAD_FOLDER = "./uploads"
@@ -31,6 +28,12 @@ SUCCESSFUL_PITCHDECK_FOLDER = "./r1_successful_pitchdecks"
 ANALYSIS_FOLDER_R2 = "./r2_analysis"
 RESPONSE_FOLDER_R2 = "./r2_response"
 
+# Initialize Firebase
+cred = credentials.Certificate(".\pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")  # Use the path to your Firebase key
+firebase_admin.initialize_app(cred, {
+    'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
+})
+
 # Create directories if they do not exist
 for folder in [UPLOAD_FOLDER, ANALYSIS_FOLDER, RESPONSES_FOLDER, OVERVIEWS_FOLDER, SUCCESSFUL_PITCHDECK_FOLDER, ANALYSIS_FOLDER_R2, RESPONSE_FOLDER_R2]:
     if not os.path.exists(folder):
@@ -39,21 +42,21 @@ for folder in [UPLOAD_FOLDER, ANALYSIS_FOLDER, RESPONSES_FOLDER, OVERVIEWS_FOLDE
 # Function to parse the overview text
 def parse_overview(text):
     overview_data = {
-        "Geography": "",
-        "Industry": "",
-        "Stage": "",
+        "Geography": "Not mentioned",
+        "Industry": "Not mentioned",
+        "Stage": "Not mentioned",
         "OverallScore": 0
     }
 
-    # Update regex pattern to make it more flexible
+    # Updated regex pattern to match the expected overview structure
     overview_pattern = (
-        r"Geography:\s*(.+?)\n"
-        r"- Industry:\s*(.+?)\n"
-        r"- Stage:\s*(.+?)\n"
-        r"- Overall Score:\s*(\d+)"
+        r"Geography:\s*\[(.+?)\]\n"
+        r"- Industry:\s*\[(.+?)\]\n"
+        r"- Stage:\s*\[(.+?)\]\n"
+        r"- Overall Score:\s*\[(\d+)"
     )
-    
-    # Match pattern to extract the overview details
+
+    # Match pattern to extract each field individually
     overview_match = re.search(overview_pattern, text, re.DOTALL)
     if overview_match:
         overview_data["Geography"] = overview_match.group(1).strip()
@@ -66,8 +69,127 @@ def parse_overview(text):
         
     return overview_data
 
-# Function to parse the detailed analysis text
-def parse_detailed_analysis(text):
+import tempfile
+import json
+
+def upload_to_firebase(data, firebase_path, from_file=True):
+    """
+    Uploads JSON content to Firebase Storage.
+    Parameters:
+    - data: path to local file or dictionary of JSON content
+    - firebase_path: the path in Firebase Storage
+    - from_file: if True, expects data to be a file path; if False, expects data to be a dictionary
+    """
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(firebase_path)
+
+        if from_file:
+            # Upload directly from a file if from_file is True
+            if not os.path.exists(data):
+                logging.error(f"Local file {data} does not exist.")
+                return False
+            blob.upload_from_filename(data)
+        else:
+            # Create a temporary file to store JSON data
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_file:
+                json.dump(data, temp_file)
+                temp_file_path = temp_file.name
+
+            # Upload the temporary JSON file to Firebase
+            blob.upload_from_filename(temp_file_path, content_type="application/json")
+
+            # Clean up the temporary file after upload
+            os.remove(temp_file_path)
+
+        # Confirm upload
+        if blob.exists():
+            logging.info(f"Firebase upload confirmed for {firebase_path}.")
+            return True
+        else:
+            logging.error(f"Upload failed. {firebase_path} does not exist in Firebase Storage.")
+            return False
+    except Exception as e:
+        logging.error(f"Failed to upload {firebase_path} to Firebase: {e}")
+        return False
+
+
+    
+def save_analysis_locally(parsed_detailed_analysis, analysis_filename):
+    analysis_file_path = os.path.join(ANALYSIS_FOLDER, analysis_filename)
+
+    try:
+        # Save the parsed analysis data locally
+        with open(analysis_file_path, "w") as file:
+            json.dump(parsed_detailed_analysis, file, indent=4)
+        logging.info(f"Analysis saved locally at {analysis_file_path}")
+        
+        # Check if file exists and has content
+        if os.path.exists(analysis_file_path) and os.path.getsize(analysis_file_path) > 0:
+            logging.info(f"Local analysis file {analysis_filename} exists and is ready for upload.")
+            return analysis_file_path
+        else:
+            logging.error(f"Local analysis file {analysis_filename} is empty or not saved correctly.")
+            return None
+    except Exception as e:
+        logging.error(f"Error saving analysis locally: {e}")
+        return None
+    
+def analyze_and_upload(filename):
+    try:
+        # Assuming parsed_detailed_analysis contains the analysis data
+        parsed_detailed_analysis = get_detailed_analysis_data()  # Hypothetical function call
+        analysis_filename = f"{filename.split('.')[0]}_analysis.json"
+        
+        # Step 1: Save locally
+        local_analysis_path = save_analysis_locally(parsed_detailed_analysis, analysis_filename)
+        
+        if local_analysis_path:
+            # Step 2: Upload to Firebase
+            firebase_path = f"analyses/{analysis_filename}"
+            if not upload_to_firebase(local_analysis_path, firebase_path):
+                logging.error(f"Failed to upload {analysis_filename} to Firebase.")
+            else:
+                logging.info(f"{analysis_filename} successfully uploaded to Firebase.")
+        else:
+            logging.error(f"Skipping upload as local file {analysis_filename} was not created properly.")
+    except Exception as e:
+        logging.error(f"Error in analyze_and_upload for {filename}: {e}")
+
+
+# Helper function to download Firebase file to a temporary location
+def download_firebase_file(filename):
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(f"uploads/{filename}")
+        
+        # Create a temporary file to store the downloaded content
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        blob.download_to_filename(temp_file.name)
+        return temp_file.name
+    except Exception as e:
+        logging.error(f"Error downloading file from Firebase: {e}")
+        return None
+    
+# Helper function to download a Round 2 file from "successful_pitchdecks" folder in Firebase to a temporary location    
+def download_round_2_file(filename):
+    try:
+        bucket = storage.bucket()
+        # Specify the path within Firebase Storage
+        blob = bucket.blob(f"successful_pitchdecks/{filename}")
+        
+        # Create a temporary file to store the downloaded content
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        blob.download_to_filename(temp_file.name)
+        
+        logging.info(f"File {filename} downloaded from 'successful_pitchdecks' to {temp_file.name}")
+        return temp_file.name
+    except Exception as e:
+        logging.error(f"Error downloading file {filename} from 'successful_pitchdecks': {e}")
+        return None
+
+
+def parse_detailed_analysis(data):
     analysis_data = {
         "Team": [],
         "Market": [],
@@ -75,19 +197,27 @@ def parse_detailed_analysis(text):
         "Impact": [],
         "Investment Opportunity": []
     }
-    row_pattern = r"\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(.*?)\s*\|"
-    lines = text.splitlines()
-    for line in lines:
-        match = re.match(row_pattern, line)
-        if match:
-            category, criteria, score, explanation = match.groups()
-            if category in analysis_data:
-                analysis_data[category].append({
-                    "Criteria": criteria,
-                    "Score": int(score),
-                    "Explanation": explanation
-                })
-    logging.info("Detailed analysis parsed successfully.")
+
+    # Ensure data is a list of parsed dictionaries
+    if not isinstance(data, list):
+        logging.error("Expected data to be a list of dictionaries")
+        return analysis_data
+
+    # Populate analysis_data with entries grouped by category
+    for item in data:
+        category = item.get("Category", "Uncategorized")
+        entry = {
+            "Criteria": item.get("Criteria", ""),
+            "Score": item.get("Score", 0),
+            "Explanation": item.get("Explanation", "")
+        }
+        # Append entry to the appropriate category
+        if category in analysis_data:
+            analysis_data[category].append(entry)
+        else:
+            analysis_data["Uncategorized"].append(entry)
+
+    logging.info("Detailed analysis parsed successfully into categories.")
     return analysis_data
 
 def extract_text_from_pdf(file_path):
@@ -105,66 +235,112 @@ def upload_file_to_openai(file_path):
 
 def get_overview(text):
     prompt = f"""
-    You are a venture capital analyst evaluating a pitch deck. Extract only the overview information using the format strictly as shown:
-    
-    **Overview**:
-    - Geography: [Provide the startup's location]
-    - Industry: [Specify the industry]
-    - Stage: [Specify the startup stage]
-    - Overall Score: [Provide a score out of 10 summarizing the pitch deck's quality]
+        You are a venture capital analyst evaluating a pitch deck. Extract only the overview information and format it strictly as JSON, structured as shown:
 
-    Text to evaluate: {text}
+        {{
+            "Geography": "[Startup's location, e.g., Europe]",
+            "Industry": "[Specify the industry, e.g., Agricultural Robotics]",
+            "Stage": "[Specify the startup stage, e.g., Pre-Seed]",
+            "OverallScore": [Provide a score out of 10, e.g., 7]
+        }}
+
+        Do not include any extra text, headings, or markdown. The response should be in this JSON structure only.
+
+        **Text to evaluate**: {text}
     """
     response = openai.ChatCompletion.create(
         model="gpt-4-turbo",
         messages=[{"role": "user", "content": prompt}]
     )
     overview_text = response['choices'][0]['message']['content']
-    logging.info("Overview extracted successfully.")
-    return overview_text
+    
+    # Attempt to parse overview_text as JSON
+    try:
+        parsed_overview = json.loads(overview_text)  # Parses the string into a JSON object
+        logging.info("Overview extracted and parsed successfully.")
+    except json.JSONDecodeError:
+        logging.error("Failed to parse overview as JSON. Raw text returned.")
+        parsed_overview = {"Overview": overview_text}  # Fallback to raw text if parsing fails
+
+    return parsed_overview
 
 def get_detailed_analysis(text):
     # Construct the prompt for OpenAI with additional fields for overview information
     prompt = f"""
-    You are a venture capital analyst evaluating a pitch deck. Please provide a structured analysis using the criteria below. Use a scale of 1 to 10 for scoring each criterion and provide a detailed explanation. Please try to be as critical as possible. Look for any faults and cross-reference with other pitch decks you can find online. We are trying to create an accurate pitch deck classifier modal that can assist a business in deciding whether a  VC Startup is worth investing in.
-    Format the output strictly as shown.
+        You are a venture capital analyst evaluating a pitch deck. Please provide a structured analysis using the criteria below. Use a scale of 1 to 10 for scoring each criterion and provide a detailed explanation. Please be critical, noting any weaknesses or areas for improvement, to help assess the startup's investment viability.
 
-    **Detailed Analysis**:
-    ```
-    | Category               | Criteria                                    | Score (1-10) | Explanation                                                                 |
-    |------------------------|---------------------------------------------|--------------|-----------------------------------------------------------------------------|
-    | Team                   | Does the founding team look complete?       | ""            | "" |
-    | Team                   | Does the team look strong and right to compete in this space? | "" | "" |
-    | Team                   | (Team) Suitable for next step?              | ""            | "" |
-    | Market                 | Is the top-down TAM above €1B?              | ""            | "" |
-    | Market                 | Does the team create a new market or unlock a shadow market? | "" | "" |
-    | Market                 | Is it a growing market? (Market Growth Rate > 5%) | "" | "" |
-    | Market                 | Is the timing right for this kind of business? | "" | "" |
-    | Market                 | (Market) Suitable for next step?            | ""            | "" |
-    | Product/Technology     | Is the TRL above 3?                         | ""            | "" |
-    | Product/Technology     | (Product/Technology) Suitable for next step? | "" | "" |
-    | Impact                 | Does the team aim to achieve climate impact through a scalable and innovative approach? | "" | "" |
-    | Impact                 | Could there be a conflict with EU Taxonomy alignment? | "" | "" |
-    | Impact                 | (Impact) Suitable for next step?            | ""            | "" |
-    | Investment Opportunity | Could a minimum equity stake of 8% be achieved given the round size and company funding history? | "" | "" |
-    | Investment Opportunity | Could there be a conflict of interest with an existing portfolio company? | "" | "" |
-    | Investment Opportunity | (Investment Opportunity) Suitable for next step? | "" | "" |
-    ```
+        **Output the result as a JSON array**, with each entry strictly in the following format:
 
-    - Do not include any extra text before or after the response.
-    - Each category must have criteria with scores and explanations.
-    
-    **Text to evaluate**: {text}
+        [
+            {{
+                "Category": "Team",
+                "Criteria": "Does the founding team look complete?",
+                "Score": 8,
+                "Explanation": "The team covers essential roles in engineering, software, and marketing. However, lacks a finance expert which may hinder growth."
+            }},
+            {{
+                "Category": "Market",
+                "Criteria": "Is the top-down TAM above €1B?",
+                "Score": 7,
+                "Explanation": "The target market is estimated above €1B, with high growth potential."
+            }},
+            {{
+                "Category": "Product/Technology",
+                "Criteria": "Is the TRL above 3?",
+                "Score": 6,
+                "Explanation": "The technology readiness level is moderate (TRL 4-5), needing more development to scale."
+            }},
+            ...
+        ]
+
+        Categories and criteria to include:
+
+        - **Team**: 
+            - Does the founding team look complete?
+            - Does the team look strong and right to compete in this space?
+            - (Team) Suitable for next step?
+
+        - **Market**: 
+            - Is the top-down TAM above €1B?
+            - Does the team create a new market or unlock a shadow market?
+            - Is it a growing market? (Market Growth Rate > 5%)
+            - Is the timing right for this kind of business?
+            - (Market) Suitable for next step?
+
+        - **Product/Technology**: 
+            - Is the TRL above 3?
+            - (Product/Technology) Suitable for next step?
+
+        - **Impact**: 
+            - Does the team aim to achieve climate impact through a scalable and innovative approach?
+            - Could there be a conflict with EU Taxonomy alignment?
+            - (Impact) Suitable for next step?
+
+        - **Investment Opportunity**:
+            - Could a minimum equity stake of 8% be achieved given the round size and company funding history?
+            - Could there be a conflict of interest with an existing portfolio company?
+            - (Investment Opportunity) Suitable for next step?
+
+        Only output the JSON array with the listed fields and content as structured. Avoid any additional explanations or formatting, such as backticks.
+
+        **Text to evaluate**: {text}
     """
+
     logging.info("Sending prompt to OpenAI API...")
 
     response = openai.ChatCompletion.create(
         model="gpt-4-turbo",
         messages=[{"role": "user", "content": prompt}]
     )
-    detailed_analysis_text = response['choices'][0]['message']['content']
-    logging.info("Detailed analysis extracted successfully.")
-    return detailed_analysis_text
+    detailed_analysis_json = response['choices'][0]['message']['content']
+    
+    # Parse the JSON-formatted response
+    try:
+        parsed_analysis = json.loads(detailed_analysis_json)
+        return parsed_analysis
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing JSON: {e}")
+        return None
 
 def parse_round_two_analysis(analysis_text):
     # Initialize a dictionary to hold the structured parsed data
@@ -208,24 +384,48 @@ def round_two_analysis():
     try:
         data = request.get_json()
         filename = data.get("filename")
+        
+        # Ensure filename is provided
         if not filename:
+            logging.error("Filename is required")
             return jsonify({"error": "Filename is required"}), 400
 
-        # File path in the successful pitch decks folder
-        file_path = os.path.join(SUCCESSFUL_PITCHDECK_FOLDER, filename)
-        if not os.path.exists(file_path):
-            return jsonify({"error": "File not found"}), 404
+        # Step 1: Download file from Firebase specifically from the "successful_pitchdecks" folder
+        file_path = download_round_2_file(filename)
+        if not file_path:
+            logging.error(f"Failed to download {filename} from Firebase 'successful_pitchdecks'.")
+            return jsonify({"error": f"File '{filename}' could not be downloaded from 'successful_pitchdecks'"}), 404
 
+        # Step 2: Extract text from the downloaded PDF
         text = extract_text_from_pdf(file_path)
+        logging.info("Text extracted from PDF successfully.")
 
-        # Updated prompt for deeper analysis with strict table format
+        # Step 3: Define the prompt for detailed Round 2 analysis
         prompt = f"""
         You are a venture capital analyst conducting a second-round, in-depth evaluation of a pitch deck.
-        Use a scale of 1 to 10 for scoring each criterion, and provide a thorough explanation for each score. 
+        Use a scale of 1 to 10 for scoring each criterion, and provide a thorough explanation for each score.
         Be as critical as possible, focusing on any risks, potential red flags, strengths, and the overall potential of the startup.
-        Please provide your analysis in a structured table format, as shown below:
 
-        **Detailed Second-Round Analysis**:
+        Format the response strictly as a JSON array in brackets, with each item following this structure:
+
+        [
+            {{
+                "Category": "Team",
+                "Criteria": "Founder-Market Fit: Relevant prior experience to build this company?",
+                "Score": 7,
+                "Explanation": "Founders have strong backgrounds in related industries but lack direct experience in the target market."
+            }},
+            {{
+                "Category": "Market",
+                "Criteria": "Top-Down TAM: Is it above €10B?",
+                "Score": 8,
+                "Explanation": "The target market is substantial, with TAM estimates exceeding €10B."
+            }},
+            ...
+        ]
+
+        Below is every question and category, please use them:
+
         ```
         | Category               | Criteria                                                                                  | Score (1-10) | Explanation                                                                 |
         |------------------------|------------------------------------------------------------------------------------------|--------------|-----------------------------------------------------------------------------|
@@ -252,73 +452,51 @@ def round_two_analysis():
         | Product/Technology     | TRL Level: Is the Technology Readiness Level (TRL) above 3?                             | ""           | ""                                                                          |
         ```
 
-        - Do not include any extra text before or after the response.
-        - Each row should contain the category, specific criterion, score, and a detailed explanation.
-
+        Only include the JSON array as shown, with no additional text, comments, or formatting.
         **Text to evaluate**: {text}
         """
 
-        # Send the request to OpenAI and capture the response
+        # Step 4: Send prompt to OpenAI API
         response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
         deep_analysis_text = response['choices'][0]['message']['content']
+        logging.info("Received response from OpenAI.")
 
-        # Parse the received analysis text into the structured format
-        parsed_analysis = parse_round_two_analysis(deep_analysis_text)
+        # Step 5: Parse the response as JSON
+        try:
+            parsed_analysis = json.loads(deep_analysis_text)
+            logging.info("Parsed analysis response successfully.")
+        except json.JSONDecodeError as e:
+            logging.error(f"Error parsing analysis response: {e}")
+            return jsonify({"error": "Failed to parse analysis response from OpenAI"}), 500
 
-        # Prepare file paths
+        # Step 6: Define filenames for Firebase storage
         analysis_filename = f"{filename.split('.')[0]}_r2_analysis.json"
-        analysis_path = os.path.join(ANALYSIS_FOLDER_R2, analysis_filename)
         response_filename = f"{filename.split('.')[0]}_r2_response.json"
-        response_path = os.path.join(RESPONSE_FOLDER_R2, response_filename)
 
-        # Save parsed structured analysis to `r2_analysis` folder
-        with open(analysis_path, "w") as analysis_file:
-            json.dump({"filename": filename, "analysis": parsed_analysis}, analysis_file, indent=4)
+        # Step 7: Upload parsed analysis to Firebase
+        if not upload_to_firebase(parsed_analysis, f"r2_analysis/{analysis_filename}", from_file=False):
+            logging.error(f"Failed to upload parsed analysis for {filename} to Firebase.")
+            return jsonify({"error": "Failed to upload parsed analysis to Firebase"}), 500
 
-        # Save raw response text to `r2_response` folder
-        with open(response_path, "w") as response_file:
-            json.dump({"filename": filename, "response": deep_analysis_text}, response_file, indent=4)
+        # Step 8: Upload raw response to Firebase
+        if not upload_to_firebase(deep_analysis_text, f"r2_responses/{response_filename}", from_file=False):
+            logging.error(f"Failed to upload raw response for {filename} to Firebase.")
+            return jsonify({"error": "Failed to upload raw response to Firebase"}), 500
 
-        # Return structured analysis result for the specific pitch deck
-        return jsonify({"analysis": parsed_analysis}), 200
+        # Step 9: Clean up local file after processing
+        os.remove(file_path)
+        logging.info(f"Temporary file {file_path} removed after analysis.")
+
+        # Step 10: Return structured response
+        return jsonify({"DetailedAnalysis": parsed_analysis}), 200
 
     except Exception as e:
         logging.error(f"Error during round two analysis: {e}")
         return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/upload', methods=['POST'])
-def upload_pitch_deck():
-    try:
-        # Check if 'file' is in request.files
-        if 'file' not in request.files:
-            return jsonify({"error": "No file part in the request"}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"error": "No selected file"}), 400
-
-        # Save file
-        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(file_path)  # This is where the file saves locally
-
-        # MongoDB entry
-        collection.insert_one({
-            "filename": file.filename,
-            "analysis": None,
-            "timestamp": datetime.now()
-        })
-        logging.info(f"File uploaded successfully: {file_path}")
-
-        return jsonify({"message": "File successfully uploaded"}), 200
-    except Exception as e:
-        logging.error(f"Error in file upload: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
+  
 @app.route('/api/analyze', methods=['POST'])
 def analyze_pitch_deck():
     try:
@@ -330,52 +508,89 @@ def analyze_pitch_deck():
             logging.error("File not found in uploads directory")
             return jsonify({"error": "File not found in uploads directory"}), 404
 
+        # Extract text from PDF file
         text = extract_text_from_pdf(file_path)
-        
-        # Step 1: Get and save Overview
+
+        # Step 1: Get and parse overview
         overview_text = get_overview(text)
         parsed_overview = parse_overview(overview_text)
+
+        # Step 2: Get detailed analysis
+        detailed_analysis_data = get_detailed_analysis(text)
+        parsed_detailed_analysis = parse_detailed_analysis(detailed_analysis_data)
+
+        # Save to Firebase
+        analysis_filename = f"{filename.split('.')[0]}_analysis.json"
+        upload_to_firebase(parsed_detailed_analysis, f"analyses/{analysis_filename}", from_file=False)
+
+        # Save overview and analysis locally or log status
+        combined_data = {"Overview": parsed_overview, "DetailedAnalysis": parsed_detailed_analysis}
+        return jsonify({
+            "Overview": parsed_overview,
+            "DetailedAnalysis": parsed_detailed_analysis
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error during analysis: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# Main analysis function
+@app.route('/api/analyze-firebase', methods=['POST'])
+def analyze_pitch_deck_firebase():
+    try:
+        data = request.get_json()
+        filename = data.get("filename")
         
-        # Save the overview in the "overviews" folder
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if not filename:
+            return jsonify({"error": "Filename is required"}), 400
+
+        # Download file from Firebase
+        file_path = download_firebase_file(filename)
+        if not file_path:
+            return jsonify({"error": "Failed to download file from Firebase"}), 404
+
+        # Extract text from the downloaded PDF
+        text = extract_text(file_path)
+
+        # Step 1: Extract overview
+        overview_text = get_overview(text)
         overview_filename = f"{filename.split('.')[0]}_overview.json"
         overview_path = os.path.join(OVERVIEWS_FOLDER, overview_filename)
         with open(overview_path, "w") as file:
-            json.dump(parsed_overview, file, indent=4)
-        logging.info(f"Overview saved to {overview_path}")
+            json.dump({"Overview": overview_text}, file, indent=4)
 
-        # Step 2: Get and save Detailed Analysis
+        # Upload overview to Firebase and log status
+        if not upload_to_firebase(overview_path, f"overviews/{overview_filename}"):
+            logging.warning(f"Failed to upload overview file {overview_filename} to Firebase.")
+
+        # Step 2: Extract detailed analysis
         detailed_analysis_text = get_detailed_analysis(text)
-        parsed_detailed_analysis = parse_detailed_analysis(detailed_analysis_text)
-        
-        # Save the detailed analysis separately
         analysis_filename = f"{filename.split('.')[0]}_analysis.json"
-        analysis_file_path = os.path.join(ANALYSIS_FOLDER, analysis_filename)
-        with open(analysis_file_path, "w") as file:
-            json.dump(parsed_detailed_analysis, file, indent=4)
-        logging.info(f"Detailed analysis saved to {analysis_file_path}")
+        analysis_path = os.path.join(ANALYSIS_FOLDER, analysis_filename)
+        with open(analysis_path, "w") as file:
+            json.dump({"DetailedAnalysis": detailed_analysis_text}, file, indent=4)
 
-        # Save the full API response to "responses" folder
+        # Upload detailed analysis to Firebase and log status
+        if not upload_to_firebase(analysis_path, f"analyses/{analysis_filename}"):
+            logging.warning(f"Failed to upload analysis file {analysis_filename} to Firebase.")
+
+        # Full API response storage
         response_data = {
             "Overview": overview_text,
             "DetailedAnalysis": detailed_analysis_text
         }
         response_filename = f"{filename.split('.')[0]}_response.json"
-        response_file_path = os.path.join(RESPONSES_FOLDER, response_filename)
-        with open(response_file_path, "w") as file:
+        response_path = os.path.join(RESPONSES_FOLDER, response_filename)
+        with open(response_path, "w") as file:
             json.dump(response_data, file, indent=4)
-        logging.info(f"Full API response saved to {response_file_path}")
 
-        # Combine both into MongoDB record
-        combined_data = {
-            "Overview": parsed_overview,
-            "DetailedAnalysis": parsed_detailed_analysis
-        }
-        
-        collection.update_one(
-            {"filename": filename},
-            {"$set": {"analysis": combined_data, "timestamp": datetime.now()}}
-        )
+        # Upload response data to Firebase and log status
+        if not upload_to_firebase(response_path, f"responses/{response_filename}"):
+            logging.warning(f"Failed to upload response file {response_filename} to Firebase.")
+
+        # Clean up the temporary file after analysis
+        os.remove(file_path)
 
         return jsonify({
             "message": "Analysis complete",
@@ -387,6 +602,47 @@ def analyze_pitch_deck():
     except Exception as e:
         logging.error(f"Error during analysis: {e}")
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/sync_check', methods=['GET'])
+def sync_check():
+    try:
+        # List local files
+        local_files = {
+            "overviews": os.listdir(OVERVIEWS_FOLDER),
+            "analyses": os.listdir(ANALYSIS_FOLDER),
+            "responses": os.listdir(RESPONSES_FOLDER)
+        }
+
+        # List Firebase files
+        bucket = storage.bucket()
+        firebase_files = {
+            "overviews": [blob.name for blob in bucket.list_blobs(prefix="overviews/")],
+            "analyses": [blob.name for blob in bucket.list_blobs(prefix="analyses/")],
+            "responses": [blob.name for blob in bucket.list_blobs(prefix="responses/")]
+        }
+
+        # Remove prefixes from Firebase paths for easy comparison
+        firebase_files_cleaned = {
+            folder: [name.replace(f"{folder}/", "") for name in names]
+            for folder, names in firebase_files.items()
+        }
+
+        # Compare files and find discrepancies
+        discrepancies = {
+            folder: list(set(local_files[folder]) ^ set(firebase_files_cleaned[folder]))
+            for folder in local_files
+        }
+
+        return jsonify({
+            "local_files": local_files,
+            "firebase_files": firebase_files_cleaned,
+            "discrepancies": discrepancies
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error during sync check: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/local-uploads', methods=['GET'])
 def get_local_uploads():
@@ -631,82 +887,92 @@ def get_successful_pitchdecks():
         logging.error(f"Error fetching successful pitch decks: {e}")
         return jsonify({"error": str(e)}), 500
     
-    # Endpoint to get the list of all files in r2_analysis
 @app.route('/api/r2_analyses', methods=['GET'])
 def get_r2_analyses():
     try:
-        files = os.listdir(ANALYSIS_FOLDER_R2)
-        analysis_files = [file for file in files if file.endswith(".json")]
+        bucket = storage.bucket()
+        blobs = bucket.list_blobs(prefix="r2_analysis/")
+        analysis_files = [blob.name.split('/')[-1] for blob in blobs if blob.name.endswith(".json")]
         return jsonify(analysis_files), 200
     except Exception as e:
-        logging.error(f"Error fetching round 2 analyses: {e}")
+        logging.error(f"Error fetching round 2 analyses from Firebase: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Endpoint to get the content of a specific analysis file
 @app.route('/api/r2_analyses/<filename>', methods=['GET'])
 def get_r2_analysis_file(filename):
     try:
-        file_path = os.path.join(ANALYSIS_FOLDER_R2, filename)
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
-                content = json.load(file)
-            return jsonify(content), 200  # Serve the structured JSON
-        else:
+        firebase_path = f"r2_analysis/{filename}"
+        bucket = storage.bucket()
+        blob = bucket.blob(firebase_path)
+
+        if not blob.exists():
             return jsonify({"error": "File not found"}), 404
+
+        file_content = blob.download_as_text()
+        content = json.loads(file_content)
+        return jsonify(content), 200
     except Exception as e:
-        logging.error(f"Error fetching round 2 analysis file {filename}: {e}")
+        logging.error(f"Error fetching round 2 analysis file {filename} from Firebase: {e}")
         return jsonify({"error": str(e)}), 500
-
-
     
 @app.route('/api/r2_analyses/<filename>', methods=['DELETE'])
 def delete_r2_analysis(filename):
     try:
-        file_path = os.path.join(ANALYSIS_FOLDER_R2, filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)  # Delete the file
+        firebase_path = f"r2_analysis/{filename}"
+        bucket = storage.bucket()
+        blob = bucket.blob(firebase_path)
+
+        if blob.exists():
+            blob.delete()
             return jsonify({"message": f"Analysis {filename} deleted successfully"}), 200
         else:
             return jsonify({"error": "File not found"}), 404
     except Exception as e:
-        logging.error(f"Error deleting round 2 analysis {filename}: {e}")
+        logging.error(f"Error deleting round 2 analysis {filename} from Firebase: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/r2_responses', methods=['GET'])
 def get_r2_responses():
     try:
-        files = os.listdir(RESPONSE_FOLDER_R2)
-        response_files = [file for file in files if file.endswith(".json")]
+        bucket = storage.bucket()
+        blobs = bucket.list_blobs(prefix="r2_response/")
+        response_files = [blob.name.split('/')[-1] for blob in blobs if blob.name.endswith(".json")]
         return jsonify(response_files), 200
     except Exception as e:
-        logging.error(f"Error fetching round 2 responses: {e}")
+        logging.error(f"Error fetching round 2 responses from Firebase: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/r2_responses/<filename>', methods=['GET'])
 def get_r2_response_file(filename):
     try:
-        file_path = os.path.join(RESPONSE_FOLDER_R2, filename)
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
-                content = json.load(file)
-            return jsonify(content), 200
-        else:
+        firebase_path = f"r2_response/{filename}"
+        bucket = storage.bucket()
+        blob = bucket.blob(firebase_path)
+
+        if not blob.exists():
             return jsonify({"error": "File not found"}), 404
+
+        file_content = blob.download_as_text()
+        content = json.loads(file_content)
+        return jsonify(content), 200
     except Exception as e:
-        logging.error(f"Error fetching round 2 response file {filename}: {e}")
+        logging.error(f"Error fetching round 2 response file {filename} from Firebase: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/r2_responses/<filename>', methods=['DELETE'])
 def delete_r2_response(filename):
     try:
-        file_path = os.path.join(RESPONSE_FOLDER_R2, filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        firebase_path = f"r2_response/{filename}"
+        bucket = storage.bucket()
+        blob = bucket.blob(firebase_path)
+
+        if blob.exists():
+            blob.delete()
             return jsonify({"message": "Round 2 response deleted successfully"}), 200
         else:
             return jsonify({"error": "File not found"}), 404
     except Exception as e:
-        logging.error(f"Error deleting round 2 response {filename}: {e}")
+        logging.error(f"Error deleting round 2 response {filename} from Firebase: {e}")
         return jsonify({"error": str(e)}), 500
     
 @app.route('/api/delete/<filename>', methods=['DELETE'])

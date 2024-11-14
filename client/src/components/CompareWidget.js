@@ -16,8 +16,10 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
+import { ref, getDownloadURL, listAll, uploadBytes } from 'firebase/storage';
+import { storage } from '../firebaseconfig'; // Firebase config for storage reference
 import axios from 'axios';
-import apiUrl from '../config'; // Import apiUrl
+import apiUrl from '../config';
 import '../styles/CompareWidget.css';
 
 const CompareWidget = () => {
@@ -32,14 +34,21 @@ const CompareWidget = () => {
 
   const fetchAndRankAnalyses = async () => {
     try {
-      const response = await axios.get(`${apiUrl}/api/analyses`);
-      const analysesData = await Promise.all(
-        response.data.map(async (filename) => {
-          const analysisResponse = await axios.get(`${apiUrl}/api/analyses/${filename}`);
-          const analysis = analysisResponse.data;
+      const firebaseRef = ref(storage, 'analyses/');
+      const analysisFiles = await listAll(firebaseRef);
 
-          const overviewResponse = await axios.get(`${apiUrl}/api/overviews/${filename.replace("_analysis", "_overview")}`);
-          const overview = overviewResponse.data;
+      const analysesData = await Promise.all(
+        analysisFiles.items.map(async (itemRef) => {
+          const filename = itemRef.name;
+          const analysisUrl = await getDownloadURL(itemRef);
+          const analysisResponse = await fetch(analysisUrl);
+          const analysis = await analysisResponse.json();
+
+          const overviewFilename = filename.replace("_analysis.json", "_overview.json");
+          const overviewRef = ref(storage, `overviews/${overviewFilename}`);
+          const overviewUrl = await getDownloadURL(overviewRef);
+          const overviewResponse = await fetch(overviewUrl);
+          const overview = await overviewResponse.json(); // Fetch as JSON to match the new format
 
           const totalScore = calculateTotalScore(analysis);
           const passesThreshold = totalScore >= 115;
@@ -50,7 +59,7 @@ const CompareWidget = () => {
 
       const rankedData = analysesData.sort((a, b) => b.totalScore - a.totalScore);
       setRankedAnalyses(rankedData);
-      setAnalyses(response.data);
+      setAnalyses(analysisFiles.items.map((file) => file.name));
     } catch (error) {
       console.error("Error fetching analyses for comparison:", error);
     }
@@ -69,17 +78,35 @@ const CompareWidget = () => {
   };
 
   const copyAllSuccessfulPitchDecks = async () => {
-    // Filter passing pitch decks and extract filenames
     const passingPitchDecks = rankedAnalyses
       .filter((data) => data.passesThreshold)
       .map((data) => data.filename.replace("_analysis.json", ".pdf")); // Convert to original filename format
-
+  
     try {
-      const response = await axios.post(`${apiUrl}/api/copy_successful_pitchdecks`, { filenames: passingPitchDecks });
-      setMessage(response.data.message);
+      for (const filename of passingPitchDecks) {
+        // Reference to the original PDF in Firebase Storage
+        const originalRef = ref(storage, `uploads/${filename}`);
+        
+        // Fetch the download URL
+        const url = await getDownloadURL(originalRef);
+        
+        // Fetch the file as a Blob
+        const response = await fetch(url);
+        const fileBlob = await response.blob();
+        
+        // Define the destination in Firebase Storage
+        const destinationRef = ref(storage, `successful_pitchdecks/${filename}`);
+        
+        // Upload the Blob to Firebase Storage
+        await uploadBytes(destinationRef, fileBlob);
+  
+        console.log(`Successfully copied ${filename} to successful_pitchdecks/`);
+      }
+  
+      setMessage("All successful pitch decks copied to Firebase.");
     } catch (error) {
       console.error("Error copying successful pitch decks:", error);
-      setMessage("Failed to copy successful pitch decks.");
+      setMessage("Failed to copy successful pitch decks to Firebase.");
     }
   };
 

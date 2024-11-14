@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Button, TextField, Typography, LinearProgress, IconButton, Tooltip } from '@mui/material';
+import { Button, TextField, Typography, LinearProgress, IconButton } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
+import { storage } from '../firebaseconfig';
 import apiUrl from '../config';
-import PopUpModal from './PopUpModal'; // Import the PopUpModal component
+import PopUpModal from './PopUpModal';
 import '../styles/FileUploadForm.css';
 
 const FileUploadForm = () => {
@@ -13,9 +14,10 @@ const FileUploadForm = () => {
   const [message, setMessage] = useState('');
   const [loadingProgress, setLoadingProgress] = useState(null);
   const [localUploads, setLocalUploads] = useState([]);
-  const [networkUploads, setNetworkUploads] = useState([]);
+  const [firebaseUploads, setFirebaseUploads] = useState([]);
   const [isModalOpen, setModalOpen] = useState(false);
   const [filenameToDelete, setFilenameToDelete] = useState(null);
+  const [deleteSource, setDeleteSource] = useState('');
   const [deleteAll, setDeleteAll] = useState(false);
 
   useEffect(() => {
@@ -24,13 +26,23 @@ const FileUploadForm = () => {
 
   const fetchUploads = async () => {
     try {
+      // Fetch local uploads
       const localResponse = await axios.get(`${apiUrl}/api/local-uploads`);
       setLocalUploads(localResponse.data);
 
-      const networkResponse = await axios.get(`${apiUrl}/api/uploads`);
-      setNetworkUploads(networkResponse.data);
+      // Fetch Firebase uploads
+      const firebaseRef = ref(storage, 'uploads/');
+      const firebaseFiles = await listAll(firebaseRef);
+      const firebaseUploadsData = await Promise.all(
+        firebaseFiles.items.map(async (itemRef) => {
+          const url = await getDownloadURL(itemRef);
+          return { filename: itemRef.name, url };
+        })
+      );
+      setFirebaseUploads(firebaseUploadsData);
     } catch (error) {
       console.error("Error fetching uploads:", error);
+      setMessage("Error fetching uploads.");
     }
   };
 
@@ -42,8 +54,7 @@ const FileUploadForm = () => {
     setFileName(e.target.value);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleFirebaseUpload = async () => {
     if (files.length === 0) {
       setMessage("Please select one or more files to upload.");
       return;
@@ -52,44 +63,67 @@ const FileUploadForm = () => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const finalFileName = fileName || file.name.split(".").slice(0, -1).join(".");
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("fileName", `${finalFileName}.pdf`);
+      const firebaseRef = ref(storage, `uploads/${finalFileName}.pdf`);
+      const uploadTask = uploadBytesResumable(firebaseRef, file);
 
-      try {
-        setLoadingProgress(0);
-        const response = await axios.post(`${apiUrl}/api/upload`, formData, {
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setLoadingProgress(percentCompleted);
-          },
-        });
-
-        if (response.data.file_id) {
-          setMessage(`File ${file.name} uploaded successfully`);
-          setLocalUploads((prev) => [...prev, { filename: `${finalFileName}.pdf` }]);
-          setNetworkUploads((prev) => [
-            ...prev,
-            { filename: `${finalFileName}.pdf`, file_id: response.data.file_id, analysis: response.data.analysis },
-          ]);
-        } else {
-          setMessage(`File ${file.name} uploaded, but no file_id received.`);
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setLoadingProgress(progress);
+        },
+        (error) => {
+          console.error("Error uploading to Firebase:", error);
+          setMessage(`Error uploading file ${file.name}. Please try again.`);
+        },
+        async () => {
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            setFirebaseUploads((prev) => [...prev, { filename: `${finalFileName}.pdf`, url: downloadURL }]);
+            setMessage(`File ${file.name} uploaded successfully to Firebase.`);
+          } catch (error) {
+            console.error("Error getting Firebase URL:", error);
+            setMessage("Failed to retrieve file URL from Firebase.");
+          }
         }
-      } catch (error) {
-        console.error("Error uploading file:", error);
-        setMessage(`Error uploading file ${file.name}. Please try again.`);
-      }
+      );
       setLoadingProgress(null);
     }
     setFiles([]);
   };
 
-  const handleAnalyze = async (filename) => {
+  const handleAnalyzeFirebase = async (filename) => {
+    try {
+        setLoadingProgress(0);
+        setMessage(`Analyzing ${filename} on Firebase...`);
+        const response = await axios.post(
+            `${apiUrl}/api/analyze-firebase`,
+            { filename },
+            {
+                onDownloadProgress: (progressEvent) => {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    setLoadingProgress(percentCompleted);
+                },
+            }
+        );
+        setLoadingProgress(null);
+        setMessage(response.data.message);
+    } catch (error) {
+        console.error("Error analyzing Firebase file:", error.response ? error.response.data : error);
+        setMessage("Error analyzing Firebase file. Please try again.");
+        setLoadingProgress(null);
+    }
+};
+
+
+  const handleAnalyze = async (filename, source) => {
     try {
       setLoadingProgress(0);
       setMessage(`Analyzing ${filename}...`);
+
+      const endpoint = source === 'firebase' ? `${apiUrl}/api/analyze-firebase` : `${apiUrl}/api/analyze`;
       const response = await axios.post(
-        `${apiUrl}/api/analyze`,
+        endpoint,
         { filename },
         {
           onDownloadProgress: (progressEvent) => {
@@ -98,16 +132,11 @@ const FileUploadForm = () => {
           },
         }
       );
+
       setLoadingProgress(null);
       setMessage(response.data.message);
-
-      setNetworkUploads((prev) =>
-        prev.map((upload) =>
-          upload.filename === filename ? { ...upload, analysis: response.data.analysis } : upload
-        )
-      );
     } catch (error) {
-      console.error("Error analyzing file:", error);
+      console.error("Error analyzing file:", error.response ? error.response.data : error);
       setMessage("Error analyzing file. Please try again.");
       setLoadingProgress(null);
     }
@@ -116,38 +145,88 @@ const FileUploadForm = () => {
   const handleAnalyzeAll = async () => {
     setMessage("Analyzing all uploaded files...");
     for (const upload of localUploads) {
-      await handleAnalyze(upload.filename);
+      await handleAnalyze(upload.filename, 'local');
+    }
+    for (const upload of firebaseUploads) {
+      await handleAnalyze(upload.filename, 'firebase');
     }
     setMessage("All files analyzed successfully.");
   };
 
-  const handleDeleteClick = (filename) => {
+  const handleDeleteClick = (filename, source) => {
     setFilenameToDelete(filename);
+    setDeleteSource(source);
     setDeleteAll(false);
     setModalOpen(true);
   };
 
-  const handleDeleteAllClick = () => {
+  const handleDeleteAllClick = (source) => {
     setDeleteAll(true);
+    setDeleteSource(source);
     setModalOpen(true);
   };
 
+
+  const handleLocalUpload = async () => {
+    if (files.length === 0) {
+      setMessage("Please select one or more files to upload.");
+      return;
+    }
+  
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const finalFileName = fileName || file.name.split(".").slice(0, -1).join(".");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", `${finalFileName}.pdf`);
+  
+      try {
+        const response = await axios.post(`${apiUrl}/api/upload`, formData);
+        if (response.data.message) {
+          setMessage(`File ${file.name} uploaded successfully to local server.`);
+          setLocalUploads((prev) => [...prev, { filename: `${finalFileName}.pdf` }]);
+        } else {
+          setMessage(`File ${file.name} uploaded, but no confirmation received.`);
+        }
+      } catch (error) {
+        console.error("Error uploading file to local server:", error);
+        setMessage(`Error uploading file ${file.name} to local server. Please try again.`);
+      }
+    }
+    setFiles([]);
+  };
+  
   const handleDelete = async () => {
     try {
       if (deleteAll) {
-        await axios.delete(`${apiUrl}/api/uploads`);
-        setMessage("All files deleted successfully.");
-        setLocalUploads([]);
-        setNetworkUploads([]);
+        if (deleteSource === 'local') {
+          await axios.delete(`${apiUrl}/api/uploads`);
+          setMessage("All files deleted successfully from local server.");
+          setLocalUploads([]);
+        } else if (deleteSource === 'firebase') {
+          const deletePromises = firebaseUploads.map((upload) =>
+            deleteObject(ref(storage, `uploads/${upload.filename}`))
+          );
+          await Promise.all(deletePromises);
+          setFirebaseUploads([]);
+          setMessage("All files deleted successfully from Firebase.");
+        }
       } else if (filenameToDelete) {
-        await axios.delete(`${apiUrl}/api/delete/${filenameToDelete}`);
-        setMessage(`Deleted ${filenameToDelete} successfully.`);
-        setLocalUploads((prev) => prev.filter((upload) => upload.filename !== filenameToDelete));
-        setNetworkUploads((prev) => prev.filter((upload) => upload.filename !== filenameToDelete));
+        if (deleteSource === 'local') {
+          await axios.delete(`${apiUrl}/api/delete/${filenameToDelete}`);
+          setLocalUploads((prev) => prev.filter((upload) => upload.filename !== filenameToDelete));
+          setMessage(`Deleted ${filenameToDelete} successfully from local server.`);
+        } else if (deleteSource === 'firebase') {
+          const firebaseRef = ref(storage, `uploads/${filenameToDelete}`);
+          await deleteObject(firebaseRef);
+          setFirebaseUploads((prev) => prev.filter((upload) => upload.filename !== filenameToDelete));
+          setMessage(`Deleted ${filenameToDelete} successfully from Firebase.`);
+        }
       }
       setModalOpen(false);
       setFilenameToDelete(null);
       setDeleteAll(false);
+      setDeleteSource('');
     } catch (error) {
       console.error("Error deleting file(s):", error);
       setMessage("Error deleting file(s). Please try again.");
@@ -158,6 +237,7 @@ const FileUploadForm = () => {
     setModalOpen(false);
     setFilenameToDelete(null);
     setDeleteAll(false);
+    setDeleteSource('');
   };
 
   return (
@@ -169,14 +249,9 @@ const FileUploadForm = () => {
         <IconButton onClick={fetchUploads} color="primary">
           <RefreshIcon />
         </IconButton>
-        <Tooltip title="Delete All Files">
-          <IconButton onClick={handleDeleteAllClick} color="secondary">
-            <DeleteIcon />
-          </IconButton>
-        </Tooltip>
       </div>
 
-      <form onSubmit={handleSubmit} className="upload-form">
+      <form className="upload-form">
         <TextField
           label="File Name (optional)"
           value={fileName}
@@ -196,8 +271,11 @@ const FileUploadForm = () => {
           variant="outlined"
           InputLabelProps={{ shrink: true }}
         />
-        <Button className="upload-button" variant="contained" type="submit">
-          Upload
+        <Button className="upload-button" variant="contained" onClick={handleFirebaseUpload}>
+          Upload to Firebase
+        </Button>
+        <Button className="upload-button" variant="contained" onClick={handleLocalUpload}>
+          Upload to Local
         </Button>
         <Button
           variant="contained"
@@ -238,7 +316,7 @@ const FileUploadForm = () => {
             <Button
               variant="outlined"
               className="analyze-button"
-              onClick={() => handleAnalyze(upload.filename)}
+              onClick={() => handleAnalyze(upload.filename, 'local')}
             >
               Analyze
             </Button>
@@ -246,7 +324,7 @@ const FileUploadForm = () => {
               variant="outlined"
               color="secondary"
               className="delete-button"
-              onClick={() => handleDeleteClick(upload.filename)}
+              onClick={() => handleDeleteClick(upload.filename, 'local')}
               style={{ marginLeft: '10px' }}
             >
               Delete
@@ -256,18 +334,23 @@ const FileUploadForm = () => {
       </ul>
 
       <Typography className="upload-list-title" variant="h6" gutterBottom>
-        <span className="highlight-text">Network</span> Uploads
+        <span className="highlight-text">Firebase</span> Uploads
       </Typography>
       <ul className="upload-list">
-        {networkUploads.map((upload, index) => (
+        {firebaseUploads.map((upload, index) => (
           <li key={index} className="upload-item">
-            <strong>Filename:</strong> {upload.filename} <br />
-            <strong>Analysis:</strong> {upload.analysis || "Not analyzed yet"}
-            <br />
+            <a
+              href={upload.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="upload-link"
+            >
+              {upload.filename}
+            </a>
             <Button
               variant="outlined"
               className="analyze-button"
-              onClick={() => handleAnalyze(upload.filename)}
+              onClick={() => handleAnalyzeFirebase(upload.filename, 'firebase')}
             >
               Analyze
             </Button>
@@ -275,7 +358,7 @@ const FileUploadForm = () => {
               variant="outlined"
               color="secondary"
               className="delete-button"
-              onClick={() => handleDeleteClick(upload.filename)}
+              onClick={() => handleDeleteClick(upload.filename, 'firebase')}
               style={{ marginLeft: '10px' }}
             >
               Delete

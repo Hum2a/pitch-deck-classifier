@@ -11,11 +11,11 @@ const RoundTwoResponses = () => {
   const [responseContent, setResponseContent] = useState(null);
   const [error, setError] = useState(null);
 
-  // Fetch responses function
+  // Fetch the list of response files from Firebase
   const fetchResponses = async () => {
     try {
       const response = await axios.get(`${apiUrl}/api/r2_responses`);
-      setResponses(response.data);
+      setResponses(response.data); // Populate the responses list
       setError(null);
     } catch (error) {
       setError("Failed to load responses.");
@@ -27,20 +27,18 @@ const RoundTwoResponses = () => {
     fetchResponses();
   }, []);
 
-  // Load selected response content or toggle it off
+  // Load the content of a selected response file from Firebase
   const loadResponseContent = async (filename) => {
     if (selectedResponse === filename) {
-      // Toggle off if already selected
       setSelectedResponse(null);
       setResponseContent(null);
     } else {
-      // Load content for the new selected response
       setSelectedResponse(filename);
-      setResponseContent(null); // Clear content before loading new file
+      setResponseContent(null);
 
       try {
         const response = await axios.get(`${apiUrl}/api/r2_responses/${filename}`);
-        setResponseContent(response.data);
+        setResponseContent(response.data); // Set the content of the selected response
         setError(null);
       } catch (error) {
         setError(`Failed to load content for ${filename}.`);
@@ -48,15 +46,16 @@ const RoundTwoResponses = () => {
     }
   };
 
-  // Handle response deletion
+  // Delete a response file from Firebase
   const handleDeleteResponse = async (filename) => {
     try {
       await axios.delete(`${apiUrl}/api/r2_responses/${filename}`);
-      setResponses(responses.filter((file) => file !== filename));
+      setResponses((prevResponses) => prevResponses.filter((file) => file !== filename));
       if (selectedResponse === filename) {
         setSelectedResponse(null);
         setResponseContent(null);
       }
+      setError(null);
     } catch (error) {
       setError(`Failed to delete ${filename}.`);
     }

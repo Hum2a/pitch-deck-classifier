@@ -11,13 +11,14 @@ const RoundTwoAnalysis = () => {
   const [analysisContent, setAnalysisContent] = useState(null);
   const [error, setError] = useState(null);
 
-  // Function to fetch analyses
+  // Function to fetch analyses using the API endpoint
   const fetchAnalyses = async () => {
     try {
       const response = await axios.get(`${apiUrl}/api/r2_analyses`);
       setAnalyses(response.data);
       setError(null);
     } catch (error) {
+      console.error("Error fetching analyses:", error);
       setError("Failed to load analyses.");
     }
   };
@@ -41,6 +42,7 @@ const RoundTwoAnalysis = () => {
         setAnalysisContent(response.data.analysis);
         setError(null);
       } catch (error) {
+        console.error(`Failed to load content for ${filename}:`, error);
         setError(`Failed to load content for ${filename}.`);
       }
     }
@@ -57,6 +59,7 @@ const RoundTwoAnalysis = () => {
       }
       setError(null);
     } catch (error) {
+      console.error(`Failed to delete ${filename}:`, error);
       setError(`Failed to delete ${filename}.`);
     }
   };

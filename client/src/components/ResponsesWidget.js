@@ -3,76 +3,130 @@ import { IconButton, Typography, Button, Tooltip } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
-import apiUrl from '../config'; // Import apiUrl
-import PopUpModal from './PopUpModal'; // Import the PopUpModal component
+import { ref, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
+import { storage } from '../firebaseconfig';
+import apiUrl from '../config';
+import PopUpModal from './PopUpModal';
 import '../styles/ResponsesWidget.css';
 
 const ResponsesWidget = () => {
-  const [responses, setResponses] = useState([]);
+  const [localResponses, setLocalResponses] = useState([]);
+  const [firebaseResponses, setFirebaseResponses] = useState([]);
   const [selectedResponse, setSelectedResponse] = useState(null);
   const [parsedResponse, setParsedResponse] = useState({});
-  const [isModalOpen, setModalOpen] = useState(false); // State for controlling modal visibility
-  const [deleteAll, setDeleteAll] = useState(false); // Track if delete all is selected
-  const [filenameToDelete, setFilenameToDelete] = useState(null); // Track the file selected for deletion
+  const [firebaseSelectedResponse, setFirebaseSelectedResponse] = useState(null);
+  const [firebaseParsedResponse, setFirebaseParsedResponse] = useState({});
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [deleteAll, setDeleteAll] = useState(false);
+  const [filenameToDelete, setFilenameToDelete] = useState(null);
 
   useEffect(() => {
-    fetchResponses();
+    fetchLocalResponses();
+    fetchFirebaseResponses();
   }, []);
 
-  const fetchResponses = async () => {
+  const fetchLocalResponses = async () => {
     try {
       const response = await axios.get(`${apiUrl}/api/responses`);
-      setResponses(response.data);
+      setLocalResponses(response.data);
     } catch (error) {
-      console.error("Error fetching responses:", error);
+      console.error("Error fetching local responses:", error);
+    }
+  };
+
+  const fetchFirebaseResponses = async () => {
+    try {
+      const firebaseRef = ref(storage, 'responses/');
+      const firebaseFiles = await listAll(firebaseRef);
+      const firebaseResponsesData = await Promise.all(
+        firebaseFiles.items.map(async (itemRef) => {
+          const url = await getDownloadURL(itemRef);
+          return { name: itemRef.name, url };
+        })
+      );
+      setFirebaseResponses(firebaseResponsesData);
+    } catch (error) {
+      console.error("Error fetching Firebase responses:", error);
     }
   };
 
   const handleViewResponse = async (filename) => {
     try {
       const response = await axios.get(`${apiUrl}/api/responses/${filename}`);
-      setSelectedResponse(filename);
       setParsedResponse(response.data);
+      setSelectedResponse(filename);
     } catch (error) {
       console.error("Error fetching response content:", error);
     }
   };
 
-  const handleDeleteClick = (filename) => {
-    setFilenameToDelete(filename); // Set the file to delete
-    setDeleteAll(false); // Set delete all to false
-    setModalOpen(true); // Open the modal
+  const handleViewFirebaseResponse = async (file) => {
+    try {
+      console.log("Attempting to fetch Firebase URL:", file.url);
+      const response = await fetch(file.url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch from Firebase with status ${response.status}`);
+      }
+      const responseData = await response.json();
+      setFirebaseParsedResponse(responseData);
+      setFirebaseSelectedResponse(file.name);
+    } catch (error) {
+      console.error("Error fetching Firebase response content:", error);
+    }
+  };
+
+  const handleDeleteClick = (filename, isFirebase = false) => {
+    setFilenameToDelete({ filename, isFirebase });
+    setDeleteAll(false);
+    setModalOpen(true);
   };
 
   const handleDeleteResponse = async () => {
     try {
-      if (filenameToDelete) {
-        await axios.delete(`${apiUrl}/api/responses/${filenameToDelete}`);
-        setResponses((prevResponses) => prevResponses.filter((file) => file !== filenameToDelete));
-        if (selectedResponse === filenameToDelete) {
+      const { filename, isFirebase } = filenameToDelete;
+      if (isFirebase) {
+        const fileRef = ref(storage, `responses/${filename}`);
+        await deleteObject(fileRef);
+        setFirebaseResponses((prev) => prev.filter((file) => file.name !== filename));
+        if (firebaseSelectedResponse === filename) {
+          setFirebaseSelectedResponse(null);
+          setFirebaseParsedResponse({});
+        }
+      } else {
+        await axios.delete(`${apiUrl}/api/responses/${filename}`);
+        setLocalResponses((prev) => prev.filter((file) => file !== filename));
+        if (selectedResponse === filename) {
           setSelectedResponse(null);
           setParsedResponse({});
         }
-        setModalOpen(false); // Close the modal after deletion
-        setFilenameToDelete(null); // Reset the filename to delete
       }
+      setModalOpen(false);
+      setFilenameToDelete(null);
     } catch (error) {
       console.error("Error deleting response:", error);
     }
   };
 
   const handleDeleteAllClick = () => {
-    setDeleteAll(true); // Set delete all to true
-    setModalOpen(true); // Open the modal
+    setDeleteAll(true);
+    setModalOpen(true);
   };
 
   const handleDeleteAllResponses = async () => {
     try {
-      await axios.delete(`${apiUrl}/api/responses`); // Assuming the endpoint deletes all responses
-      setResponses([]); // Clear the responses state
-      setSelectedResponse(null); // Reset any selected response
-      setParsedResponse({}); // Clear parsed response data
-      setModalOpen(false); // Close the modal after deletion
+      await axios.delete(`${apiUrl}/api/responses`);
+      setLocalResponses([]);
+
+      const firebaseRef = ref(storage, 'responses/');
+      const firebaseFiles = await listAll(firebaseRef);
+      await Promise.all(firebaseFiles.items.map((fileRef) => deleteObject(fileRef)));
+      setFirebaseResponses([]);
+      
+      setSelectedResponse(null);
+      setParsedResponse({});
+      setFirebaseSelectedResponse(null);
+      setFirebaseParsedResponse({});
+      setModalOpen(false);
     } catch (error) {
       console.error("Error deleting all responses:", error);
     }
@@ -81,7 +135,7 @@ const ResponsesWidget = () => {
   const handleModalClose = () => {
     setModalOpen(false);
     setFilenameToDelete(null);
-    setDeleteAll(false); // Reset delete all to false
+    setDeleteAll(false);
   };
 
   return (
@@ -90,7 +144,7 @@ const ResponsesWidget = () => {
         <Typography className="responses-widget-title" variant="h5">
           <span className="highlight-text">Saved</span> Responses
         </Typography>
-        <IconButton onClick={fetchResponses} color="primary">
+        <IconButton onClick={() => { fetchLocalResponses(); fetchFirebaseResponses(); }} color="primary">
           <RefreshIcon />
         </IconButton>
         <Tooltip title="Delete All Responses">
@@ -99,17 +153,18 @@ const ResponsesWidget = () => {
           </IconButton>
         </Tooltip>
       </div>
+
+      <Typography variant="h6">Local Responses</Typography>
       <ul className="response-list">
-        {responses.map((filename, index) => (
+        {localResponses.map((filename, index) => (
           <li key={index} className="response-item">
-            <Button variant="outlined" className="view-button" onClick={() => handleViewResponse(filename)}>
+            <Button variant="outlined" onClick={() => handleViewResponse(filename)}>
               {filename}
             </Button>
             <Button
               variant="outlined"
               color="secondary"
-              className="delete-button"
-              onClick={() => handleDeleteClick(filename)} // Trigger the modal on delete click
+              onClick={() => handleDeleteClick(filename)}
               style={{ marginLeft: '10px' }}
             >
               Delete
@@ -117,18 +172,44 @@ const ResponsesWidget = () => {
           </li>
         ))}
       </ul>
+
+      <Typography variant="h6">Firebase Responses</Typography>
+      <ul className="response-list">
+        {firebaseResponses.map((file, index) => (
+          <li key={index} className="response-item">
+            <Button variant="outlined" onClick={() => handleViewFirebaseResponse(file)}>
+              {file.name}
+            </Button>
+            <Button
+              variant="outlined"
+              color="secondary"
+              onClick={() => handleDeleteClick(file.name, true)}
+              style={{ marginLeft: '10px' }}
+            >
+              Delete
+            </Button>
+          </li>
+        ))}
+      </ul>
+
       {selectedResponse && (
         <div className="response-content">
-          <Typography variant="h6" gutterBottom>Response for {selectedResponse}</Typography>
+          <Typography variant="h6" gutterBottom>Local Response for {selectedResponse}</Typography>
           <pre className="response-text">{JSON.stringify(parsedResponse, null, 2)}</pre>
         </div>
       )}
 
-      {/* Popup Modal for Delete Confirmation */}
+      {firebaseSelectedResponse && (
+        <div className="response-content">
+          <Typography variant="h6" gutterBottom>Firebase Response for {firebaseSelectedResponse}</Typography>
+          <pre className="response-text">{JSON.stringify(firebaseParsedResponse, null, 2)}</pre>
+        </div>
+      )}
+
       <PopUpModal
         open={isModalOpen}
         onClose={handleModalClose}
-        onConfirm={deleteAll ? handleDeleteAllResponses : handleDeleteResponse} // Choose the appropriate delete action
+        onConfirm={deleteAll ? handleDeleteAllResponses : handleDeleteResponse}
         title="Are you sure?"
       >
         <p>Are you sure you want to {deleteAll ? "delete all responses" : "delete this response"}?</p>
