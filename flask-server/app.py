@@ -17,8 +17,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Set your OpenAI API key
-openai.api_key = "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"
-
+openai.api_key = "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"
 # Directories to store uploaded files, analyses, and responses
 UPLOAD_FOLDER = "./uploads"
 ANALYSIS_FOLDER = "./analyses"
@@ -27,6 +26,7 @@ OVERVIEWS_FOLDER = "./overviews"  # Folder to store overview files
 SUCCESSFUL_PITCHDECK_FOLDER = "./r1_successful_pitchdecks"
 ANALYSIS_FOLDER_R2 = "./r2_analysis"
 RESPONSE_FOLDER_R2 = "./r2_response"
+LOCAL_SAVE_ENABLED = True  # Flag to control local saving
 
 # Initialize Firebase
 cred = credentials.Certificate(".\pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")  # Use the path to your Firebase key
@@ -379,123 +379,123 @@ def parse_round_two_analysis(analysis_text):
     return parsed_data
 
 
-@app.route('/api/round_two_analysis', methods=['POST'])
-def round_two_analysis():
-    try:
-        data = request.get_json()
-        filename = data.get("filename")
+# @app.route('/api/round_two_analysis', methods=['POST'])
+# def round_two_analysis():
+#     try:
+#         data = request.get_json()
+#         filename = data.get("filename")
         
-        # Ensure filename is provided
-        if not filename:
-            logging.error("Filename is required")
-            return jsonify({"error": "Filename is required"}), 400
+#         # Ensure filename is provided
+#         if not filename:
+#             logging.error("Filename is required")
+#             return jsonify({"error": "Filename is required"}), 400
 
-        # Step 1: Download file from Firebase specifically from the "successful_pitchdecks" folder
-        file_path = download_round_2_file(filename)
-        if not file_path:
-            logging.error(f"Failed to download {filename} from Firebase 'successful_pitchdecks'.")
-            return jsonify({"error": f"File '{filename}' could not be downloaded from 'successful_pitchdecks'"}), 404
+#         # Step 1: Download file from Firebase specifically from the "successful_pitchdecks" folder
+#         file_path = download_round_2_file(filename)
+#         if not file_path:
+#             logging.error(f"Failed to download {filename} from Firebase 'successful_pitchdecks'.")
+#             return jsonify({"error": f"File '{filename}' could not be downloaded from 'successful_pitchdecks'"}), 404
 
-        # Step 2: Extract text from the downloaded PDF
-        text = extract_text_from_pdf(file_path)
-        logging.info("Text extracted from PDF successfully.")
+#         # Step 2: Extract text from the downloaded PDF
+#         text = extract_text_from_pdf(file_path)
+#         logging.info("Text extracted from PDF successfully.")
 
-        # Step 3: Define the prompt for detailed Round 2 analysis
-        prompt = f"""
-        You are a venture capital analyst conducting a second-round, in-depth evaluation of a pitch deck.
-        Use a scale of 1 to 10 for scoring each criterion, and provide a thorough explanation for each score.
-        Be as critical as possible, focusing on any risks, potential red flags, strengths, and the overall potential of the startup.
+#         # Step 3: Define the prompt for detailed Round 2 analysis
+#         prompt = f"""
+#         You are a venture capital analyst conducting a second-round, in-depth evaluation of a pitch deck.
+#         Use a scale of 1 to 10 for scoring each criterion, and provide a thorough explanation for each score.
+#         Be as critical as possible, focusing on any risks, potential red flags, strengths, and the overall potential of the startup.
 
-        Format the response strictly as a JSON array in brackets, with each item following this structure:
+#         Format the response strictly as a JSON array in brackets, with each item following this structure:
 
-        [
-            {{
-                "Category": "Team",
-                "Criteria": "Founder-Market Fit: Relevant prior experience to build this company?",
-                "Score": 7,
-                "Explanation": "Founders have strong backgrounds in related industries but lack direct experience in the target market."
-            }},
-            {{
-                "Category": "Market",
-                "Criteria": "Top-Down TAM: Is it above €10B?",
-                "Score": 8,
-                "Explanation": "The target market is substantial, with TAM estimates exceeding €10B."
-            }},
-            ...
-        ]
+#         [
+#             {{
+#                 "Category": "Team",
+#                 "Criteria": "Founder-Market Fit: Relevant prior experience to build this company?",
+#                 "Score": 7,
+#                 "Explanation": "Founders have strong backgrounds in related industries but lack direct experience in the target market."
+#             }},
+#             {{
+#                 "Category": "Market",
+#                 "Criteria": "Top-Down TAM: Is it above €10B?",
+#                 "Score": 8,
+#                 "Explanation": "The target market is substantial, with TAM estimates exceeding €10B."
+#             }},
+#             ...
+#         ]
 
-        Below is every question and category, please use them:
+#         Below is every question and category, please use them:
 
-        ```
-        | Category               | Criteria                                                                                  | Score (1-10) | Explanation                                                                 |
-        |------------------------|------------------------------------------------------------------------------------------|--------------|-----------------------------------------------------------------------------|
-        | Team                   | Founder-Market Fit: Relevant prior experience to build this company?                     | ""           | ""                                                                          |
-        | Team                   | Deep Knowledge: Do the founders show deep knowledge in their operating space?            | ""           | ""                                                                          |
-        | Team                   | Previous Collaboration: Have the founders worked together or known each other before?    | ""           | ""                                                                          |
-        | Team                   | VC Mindset: Do they have a 10x mindset suitable for a VC-backed company?                 | ""           | ""                                                                          |
-        | Team                   | Entrepreneurial Experience: Does anyone have entrepreneurial experience?                 | ""           | ""                                                                          |
-        | Team                   | Completeness: Is the founding team complete?                                             | ""           | ""                                                                          |
-        | Team                   | Full-time Commitment: Are they working full-time or planning to post-investment?         | ""           | ""                                                                          |
-        | Team                   | Persuasiveness: Do they demonstrate strong persuasion and conviction abilities?          | ""           | ""                                                                          |
-        | Team                   | Self-Critical: Are they self-aware, open to feedback, and aware of their strengths and weaknesses? | ""   | ""                                                                          |
-        | Team                   | Innovator Mentality: Do they demonstrate first-principle thinking, efficiency, etc.?    | ""           | ""                                                                          |
-        | Team                   | Engineering Approach: Do they iterate and test the product pre-launch?                   | ""           | ""                                                                          |
-        | Team                   | Founder Appeal: Would you want to work with this team?                                   | ""           | ""                                                                          |
-        | Market                 | Top-Down TAM: Is it above €10B?                                                          | ""           | ""                                                                          |
-        | Market                 | Bottom-Up TAM: Is it above €500m?                                                        | ""           | ""                                                                          |
-        | Market                 | Market Tailwinds: Are there favorable market dynamics or regulatory benefits?            | ""           | ""                                                                          |
-        | Market                 | Timing: Is the timing favorable for this company's entry into the market?               | ""           | ""                                                                          |
-        | Product/Technology     | Problem-Solution Fit: Does the product create real value?                               | ""           | ""                                                                          |
-        | Product/Technology     | Defensibility: Does it have IP, patents, or other defensibility factors?                | ""           | ""                                                                          |
-        | Product/Technology     | Scalability: Can it scale, considering factors like delivery complexity and capital intensity? | "" | ""                                                                          |
-        | Product/Technology     | Competitive Advantage: If not novel, does it improve processes in a way that competes with novel solutions? | "" | ""        |
-        | Product/Technology     | TRL Level: Is the Technology Readiness Level (TRL) above 3?                             | ""           | ""                                                                          |
-        ```
+#         ```
+#         | Category               | Criteria                                                                                  | Score (1-10) | Explanation                                                                 |
+#         |------------------------|------------------------------------------------------------------------------------------|--------------|-----------------------------------------------------------------------------|
+#         | Team                   | Founder-Market Fit: Relevant prior experience to build this company?                     | ""           | ""                                                                          |
+#         | Team                   | Deep Knowledge: Do the founders show deep knowledge in their operating space?            | ""           | ""                                                                          |
+#         | Team                   | Previous Collaboration: Have the founders worked together or known each other before?    | ""           | ""                                                                          |
+#         | Team                   | VC Mindset: Do they have a 10x mindset suitable for a VC-backed company?                 | ""           | ""                                                                          |
+#         | Team                   | Entrepreneurial Experience: Does anyone have entrepreneurial experience?                 | ""           | ""                                                                          |
+#         | Team                   | Completeness: Is the founding team complete?                                             | ""           | ""                                                                          |
+#         | Team                   | Full-time Commitment: Are they working full-time or planning to post-investment?         | ""           | ""                                                                          |
+#         | Team                   | Persuasiveness: Do they demonstrate strong persuasion and conviction abilities?          | ""           | ""                                                                          |
+#         | Team                   | Self-Critical: Are they self-aware, open to feedback, and aware of their strengths and weaknesses? | ""   | ""                                                                          |
+#         | Team                   | Innovator Mentality: Do they demonstrate first-principle thinking, efficiency, etc.?    | ""           | ""                                                                          |
+#         | Team                   | Engineering Approach: Do they iterate and test the product pre-launch?                   | ""           | ""                                                                          |
+#         | Team                   | Founder Appeal: Would you want to work with this team?                                   | ""           | ""                                                                          |
+#         | Market                 | Top-Down TAM: Is it above €10B?                                                          | ""           | ""                                                                          |
+#         | Market                 | Bottom-Up TAM: Is it above €500m?                                                        | ""           | ""                                                                          |
+#         | Market                 | Market Tailwinds: Are there favorable market dynamics or regulatory benefits?            | ""           | ""                                                                          |
+#         | Market                 | Timing: Is the timing favorable for this company's entry into the market?               | ""           | ""                                                                          |
+#         | Product/Technology     | Problem-Solution Fit: Does the product create real value?                               | ""           | ""                                                                          |
+#         | Product/Technology     | Defensibility: Does it have IP, patents, or other defensibility factors?                | ""           | ""                                                                          |
+#         | Product/Technology     | Scalability: Can it scale, considering factors like delivery complexity and capital intensity? | "" | ""                                                                          |
+#         | Product/Technology     | Competitive Advantage: If not novel, does it improve processes in a way that competes with novel solutions? | "" | ""        |
+#         | Product/Technology     | TRL Level: Is the Technology Readiness Level (TRL) above 3?                             | ""           | ""                                                                          |
+#         ```
 
-        Only include the JSON array as shown, with no additional text, comments, or formatting.
-        **Text to evaluate**: {text}
-        """
+#         Only include the JSON array as shown, with no additional text, comments, or formatting.
+#         **Text to evaluate**: {text}
+#         """
 
-        # Step 4: Send prompt to OpenAI API
-        response = openai.ChatCompletion.create(
-            model="gpt-4-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        deep_analysis_text = response['choices'][0]['message']['content']
-        logging.info("Received response from OpenAI.")
+#         # Step 4: Send prompt to OpenAI API
+#         response = openai.ChatCompletion.create(
+#             model="gpt-4-turbo",
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+#         deep_analysis_text = response['choices'][0]['message']['content']
+#         logging.info("Received response from OpenAI.")
 
-        # Step 5: Parse the response as JSON
-        try:
-            parsed_analysis = json.loads(deep_analysis_text)
-            logging.info("Parsed analysis response successfully.")
-        except json.JSONDecodeError as e:
-            logging.error(f"Error parsing analysis response: {e}")
-            return jsonify({"error": "Failed to parse analysis response from OpenAI"}), 500
+#         # Step 5: Parse the response as JSON
+#         try:
+#             parsed_analysis = json.loads(deep_analysis_text)
+#             logging.info("Parsed analysis response successfully.")
+#         except json.JSONDecodeError as e:
+#             logging.error(f"Error parsing analysis response: {e}")
+#             return jsonify({"error": "Failed to parse analysis response from OpenAI"}), 500
 
-        # Step 6: Define filenames for Firebase storage
-        analysis_filename = f"{filename.split('.')[0]}_r2_analysis.json"
-        response_filename = f"{filename.split('.')[0]}_r2_response.json"
+#         # Step 6: Define filenames for Firebase storage
+#         analysis_filename = f"{filename.split('.')[0]}_r2_analysis.json"
+#         response_filename = f"{filename.split('.')[0]}_r2_response.json"
 
-        # Step 7: Upload parsed analysis to Firebase
-        if not upload_to_firebase(parsed_analysis, f"r2_analysis/{analysis_filename}", from_file=False):
-            logging.error(f"Failed to upload parsed analysis for {filename} to Firebase.")
-            return jsonify({"error": "Failed to upload parsed analysis to Firebase"}), 500
+#         # Step 7: Upload parsed analysis to Firebase
+#         if not upload_to_firebase(parsed_analysis, f"r2_analysis/{analysis_filename}", from_file=False):
+#             logging.error(f"Failed to upload parsed analysis for {filename} to Firebase.")
+#             return jsonify({"error": "Failed to upload parsed analysis to Firebase"}), 500
 
-        # Step 8: Upload raw response to Firebase
-        if not upload_to_firebase(deep_analysis_text, f"r2_responses/{response_filename}", from_file=False):
-            logging.error(f"Failed to upload raw response for {filename} to Firebase.")
-            return jsonify({"error": "Failed to upload raw response to Firebase"}), 500
+#         # Step 8: Upload raw response to Firebase
+#         if not upload_to_firebase(deep_analysis_text, f"r2_responses/{response_filename}", from_file=False):
+#             logging.error(f"Failed to upload raw response for {filename} to Firebase.")
+#             return jsonify({"error": "Failed to upload raw response to Firebase"}), 500
 
-        # Step 9: Clean up local file after processing
-        os.remove(file_path)
-        logging.info(f"Temporary file {file_path} removed after analysis.")
+#         # Step 9: Clean up local file after processing
+#         os.remove(file_path)
+#         logging.info(f"Temporary file {file_path} removed after analysis.")
 
-        # Step 10: Return structured response
-        return jsonify({"DetailedAnalysis": parsed_analysis}), 200
+#         # Step 10: Return structured response
+#         return jsonify({"DetailedAnalysis": parsed_analysis}), 200
 
-    except Exception as e:
-        logging.error(f"Error during round two analysis: {e}")
-        return jsonify({"error": str(e)}), 500
+#     except Exception as e:
+#         logging.error(f"Error during round two analysis: {e}")
+#         return jsonify({"error": str(e)}), 500
   
 @app.route('/api/analyze', methods=['POST'])
 def analyze_pitch_deck():
@@ -995,6 +995,205 @@ def delete_upload(filename):
     except Exception as e:
         logging.error(f"Error deleting file '{decoded_filename}': {e}")
         return jsonify({"error": f"Error deleting file '{decoded_filename}': {str(e)}"}), 500
+    
+
+
+# Function to download the Round 2 PDF file from Firebase
+def download_round_2_file(filename):
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(f"successful_pitchdecks/{filename}")
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        blob.download_to_filename(temp_file.name)
+        if os.path.exists(temp_file.name):
+            logging.info(f"File {filename} downloaded to {temp_file.name}")
+            return temp_file.name
+        else:
+            logging.error("Downloaded file not found locally.")
+            return None
+    except Exception as e:
+        logging.error(f"Error downloading file from Firebase: {e}")
+        return None
+
+# Function to extract text from a PDF file with error handling
+def extract_text_from_pdf(file_path):
+    try:
+        logging.info(f"Extracting text from PDF at {file_path}")
+        return extract_text(file_path)
+    except Exception as e:
+        logging.error(f"Error extracting text from PDF: {e}")
+        return None
+
+# Function to send a prompt to OpenAI for Round 2 analysis
+def get_round_two_analysis(text):
+    prompt = f"""
+        You are a venture capital analyst conducting a second-round, in-depth evaluation of a pitch deck.
+        Use a scale of 1 to 10 for scoring each criterion, and provide a thorough explanation for each score.
+        Be as critical as possible, focusing on any risks, potential red flags, strengths, and the overall potential of the startup.
+
+        Format the response strictly as a JSON array in brackets, with each item following this structure:
+
+        [
+            {{
+                "Category": "Team",
+                "Criteria": "Founder-Market Fit: Relevant prior experience to build this company?",
+                "Score": 7,
+                "Explanation": "Founders have strong backgrounds in related industries but lack direct experience in the target market."
+            }},
+            {{
+                "Category": "Market",
+                "Criteria": "Top-Down TAM: Is it above €10B?",
+                "Score": 8,
+                "Explanation": "The target market is substantial, with TAM estimates exceeding €10B."
+            }},
+            ...
+        ]
+
+        Below is every question and category, please use them:
+
+        ```
+        | Category               | Criteria                                                                                  | Score (1-10) | Explanation                                                                 |
+        |------------------------|------------------------------------------------------------------------------------------|--------------|-----------------------------------------------------------------------------|
+        | Team                   | Founder-Market Fit: Relevant prior experience to build this company?                     | ""           | ""                                                                          |
+        | Team                   | Deep Knowledge: Do the founders show deep knowledge in their operating space?            | ""           | ""                                                                          |
+        | Team                   | Previous Collaboration: Have the founders worked together or known each other before?    | ""           | ""                                                                          |
+        | Team                   | VC Mindset: Do they have a 10x mindset suitable for a VC-backed company?                 | ""           | ""                                                                          |
+        | Team                   | Entrepreneurial Experience: Does anyone have entrepreneurial experience?                 | ""           | ""                                                                          |
+        | Team                   | Completeness: Is the founding team complete?                                             | ""           | ""                                                                          |
+        | Team                   | Full-time Commitment: Are they working full-time or planning to post-investment?         | ""           | ""                                                                          |
+        | Team                   | Persuasiveness: Do they demonstrate strong persuasion and conviction abilities?          | ""           | ""                                                                          |
+        | Team                   | Self-Critical: Are they self-aware, open to feedback, and aware of their strengths and weaknesses? | ""   | ""                                                                          |
+        | Team                   | Innovator Mentality: Do they demonstrate first-principle thinking, efficiency, etc.?    | ""           | ""                                                                          |
+        | Team                   | Engineering Approach: Do they iterate and test the product pre-launch?                   | ""           | ""                                                                          |
+        | Team                   | Founder Appeal: Would you want to work with this team?                                   | ""           | ""                                                                          |
+        | Market                 | Top-Down TAM: Is it above €10B?                                                          | ""           | ""                                                                          |
+        | Market                 | Bottom-Up TAM: Is it above €500m?                                                        | ""           | ""                                                                          |
+        | Market                 | Market Tailwinds: Are there favorable market dynamics or regulatory benefits?            | ""           | ""                                                                          |
+        | Market                 | Timing: Is the timing favorable for this company's entry into the market?               | ""           | ""                                                                          |
+        | Product/Technology     | Problem-Solution Fit: Does the product create real value?                               | ""           | ""                                                                          |
+        | Product/Technology     | Defensibility: Does it have IP, patents, or other defensibility factors?                | ""           | ""                                                                          |
+        | Product/Technology     | Scalability: Can it scale, considering factors like delivery complexity and capital intensity? | "" | ""                                                                          |
+        | Product/Technology     | Competitive Advantage: If not novel, does it improve processes in a way that competes with novel solutions? | "" | ""        |
+        | Product/Technology     | TRL Level: Is the Technology Readiness Level (TRL) above 3?                             | ""           | ""                                                                          |
+        ```
+
+        Only include the JSON array as shown, with no additional text, comments, or formatting.
+        **Text to evaluate**: {text}
+        """
+    try:
+        logging.info("Sending prompt to OpenAI for analysis.")
+        response = openai.ChatCompletion.create(
+            model="gpt-4-turbo",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response['choices'][0]['message']['content']
+    except openai.error.OpenAIError as e:
+        logging.error(f"OpenAI API error: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"Unexpected error communicating with OpenAI: {e}")
+        return None
+
+# Function to parse JSON from OpenAI response
+def parse_analysis(analysis_text):
+    try:
+        return json.loads(analysis_text)
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing analysis response: {e}")
+        return None
+    
+# Save analysis locally
+def save_locally(data, folder, filename):
+    try:
+        file_path = os.path.join(folder, filename)
+        with open(file_path, "w") as file:
+            json.dump(data, file, indent=4)
+        logging.info(f"Saved file locally at {file_path}")
+        return file_path
+    except Exception as e:
+        logging.error(f"Failed to save file locally: {e}")
+        return None
+
+# Firebase upload function
+def upload_to_firebase(local_path, firebase_path):
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(firebase_path)
+        blob.upload_from_filename(local_path)
+        logging.info(f"Uploaded {firebase_path} to Firebase.")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to upload to Firebase: {e}")
+        return False
+
+
+@app.route('/api/round_two_analysis', methods=['POST'])
+def round_two_analysis():
+    data = request.get_json()
+    filename = data.get("filename")
+    if not filename:
+        logging.error("Filename is required.")
+        return jsonify({"error": "Filename is required"}), 400
+
+    # Step 1: Download file
+    file_path = download_round_2_file(filename)
+    if not file_path:
+        logging.error("File download failed.")
+        return jsonify({"error": "File download failed"}), 404
+
+    # Step 2: Extract text
+    text = extract_text_from_pdf(file_path)
+    os.remove(file_path)  # Clean up file after extraction
+    if not text:
+        logging.error("Text extraction failed.")
+        return jsonify({"error": "Text extraction failed"}), 500
+
+    # Step 3: Get analysis from OpenAI
+    analysis_text = get_round_two_analysis(text)
+    if not analysis_text:
+        logging.error("OpenAI analysis failed.")
+        return jsonify({"error": "OpenAI analysis failed"}), 500
+
+    # Step 4: Parse the JSON response
+    parsed_analysis = parse_analysis(analysis_text)
+    if not parsed_analysis:
+        logging.error("Failed to parse analysis response.")
+        return jsonify({"error": "Failed to parse analysis"}), 500
+
+    # Step 5: Define filenames for analysis and response
+    analysis_filename = f"{filename.split('.')[0]}_r2_analysis.json"
+    response_filename = f"{filename.split('.')[0]}_r2_response.json"
+
+    # Step 6: Save parsed analysis locally
+    analysis_local_path = None
+    if LOCAL_SAVE_ENABLED:
+        analysis_local_path = save_locally(parsed_analysis, ANALYSIS_FOLDER_R2, analysis_filename)
+        if analysis_local_path:
+            logging.info(f"Analysis successfully saved locally at {analysis_local_path}")
+        else:
+            logging.error("Failed to save analysis locally.")
+
+    # Step 7: Save raw response locally
+    response_local_path = None
+    if LOCAL_SAVE_ENABLED:
+        response_local_path = save_locally(analysis_text, RESPONSE_FOLDER_R2, response_filename)
+        if response_local_path:
+            logging.info(f"Response successfully saved locally at {response_local_path}")
+        else:
+            logging.error("Failed to save response locally.")
+
+    # Step 8: Upload parsed analysis to Firebase if local save was successful
+    if analysis_local_path and not upload_to_firebase(analysis_local_path, f"r2_analysis/{analysis_filename}"):
+        logging.error(f"Failed to upload parsed analysis for {filename} to Firebase.")
+        return jsonify({"error": "Failed to upload parsed analysis"}), 500
+
+    # Step 9: Upload raw response to Firebase if local save was successful
+    if response_local_path and not upload_to_firebase(response_local_path, f"r2_responses/{response_filename}"):
+        logging.error(f"Failed to upload raw response for {filename} to Firebase.")
+        return jsonify({"error": "Failed to upload raw response"}), 500
+
+    # Return success message with the parsed analysis data
+    return jsonify({"DetailedAnalysis": parsed_analysis}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
