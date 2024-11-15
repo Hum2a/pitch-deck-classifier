@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 import os
 
 # Use the path provided by Render (e.g., `/etc/secrets/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json`)
-cred = credentials.Certificate("/etc/secrets/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")
+cred = credentials.Certificate("./pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")
 
 
 load_dotenv()  # Load environment variables from .env file
