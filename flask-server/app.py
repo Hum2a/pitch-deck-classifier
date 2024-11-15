@@ -15,19 +15,6 @@ import tempfile
 from dotenv import load_dotenv
 import os
 
-# firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-
-# if not firebase_credentials_path:
-#     raise ValueError("Environment variable 'FIREBASE_CREDENTIALS_PATH' is not set or invalid.")
-
-# cred = credentials.Certificate(firebase_credentials_path)
-
-print("Checking if Firebase credentials file exists:", os.path.isfile("/opt/render/project/src/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json"))
-
-cred = credentials.Certificate("/opt/render/project/src/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")
-
-
-
 load_dotenv()  # Load environment variables from .env file
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -46,11 +33,16 @@ ANALYSIS_FOLDER_R2 = "./r2_analysis"
 RESPONSE_FOLDER_R2 = "./r2_response"
 LOCAL_SAVE_ENABLED = True  # Flag to control local saving
 
+firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
 # Initialize Firebase
-cred = credentials.Certificate(".\pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")  # Use the path to your Firebase key
-firebase_admin.initialize_app(cred, {
-    'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
-})
+if firebase_creds_json:
+    firebase_creds = json.loads(firebase_creds_json)
+    cred = credentials.Certificate(firebase_creds)
+    firebase_admin.initialize_app(cred, {
+        'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
+    })
+else:
+    raise ValueError("Firebase credentials are missing.")
 
 # Create directories if they do not exist
 for folder in [UPLOAD_FOLDER, ANALYSIS_FOLDER, RESPONSES_FOLDER, OVERVIEWS_FOLDER, SUCCESSFUL_PITCHDECK_FOLDER, ANALYSIS_FOLDER_R2, RESPONSE_FOLDER_R2]:
