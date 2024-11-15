@@ -15,13 +15,17 @@ import tempfile
 from dotenv import load_dotenv
 import os
 
-firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-if not firebase_credentials_path:
-    raise ValueError("Environment variable 'FIREBASE_CREDENTIALS_PATH' is not set or is invalid.")
+# firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 
-cred = credentials.Certificate(firebase_credentials_path)
+# if not firebase_credentials_path:
+#     raise ValueError("Environment variable 'FIREBASE_CREDENTIALS_PATH' is not set or invalid.")
 
-# cred = credentials.Certificate("./pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")
+# cred = credentials.Certificate(firebase_credentials_path)
+
+print("Checking if Firebase credentials file exists:", os.path.isfile("/opt/render/project/src/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json"))
+
+cred = credentials.Certificate("/opt/render/project/src/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")
+
 
 
 load_dotenv()  # Load environment variables from .env file
