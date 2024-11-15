@@ -33,16 +33,19 @@ ANALYSIS_FOLDER_R2 = "./r2_analysis"
 RESPONSE_FOLDER_R2 = "./r2_response"
 LOCAL_SAVE_ENABLED = True  # Flag to control local saving
 
-firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 # Initialize Firebase
-if firebase_creds_json:
-    firebase_creds = json.loads(firebase_creds_json)
-    cred = credentials.Certificate(firebase_creds)
+if firebase_creds_path and os.path.exists(firebase_creds_path):
+    cred = credentials.Certificate(firebase_creds_path)
     firebase_admin.initialize_app(cred, {
         'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
     })
 else:
     raise ValueError("Firebase credentials are missing.")
+if not os.path.exists(firebase_creds_path):
+    raise ValueError(f"Cannot access Firebase credentials file at {firebase_creds_path}")
+
+
 
 # Create directories if they do not exist
 for folder in [UPLOAD_FOLDER, ANALYSIS_FOLDER, RESPONSES_FOLDER, OVERVIEWS_FOLDER, SUCCESSFUL_PITCHDECK_FOLDER, ANALYSIS_FOLDER_R2, RESPONSE_FOLDER_R2]:
