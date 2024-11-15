@@ -15,8 +15,14 @@ import tempfile
 from dotenv import load_dotenv
 import os
 
-# Use the path provided by Render (e.g., `/etc/secrets/pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json`)
-cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_PATH"))
+firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+if not firebase_credentials_path:
+    raise ValueError("Environment variable 'FIREBASE_CREDENTIALS_PATH' is not set or is invalid.")
+
+cred = credentials.Certificate(firebase_credentials_path)
+
+# cred = credentials.Certificate("./pitchdeckclassifier-firebase-adminsdk-qonml-ccee39b6d6.json")
+
 
 load_dotenv()  # Load environment variables from .env file
 
