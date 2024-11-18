@@ -18,7 +18,7 @@ import os
 load_dotenv()  # Load environment variables from .env file
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://pitch-deck-classifier.onrender.com"}})
+CORS(app, resources={r"/*": {"origins": "https://pitch-deck-classifier-1.onrender.com"}})
 
 # Directories to store uploaded files, analyses, and responses
 UPLOAD_FOLDER = "./uploads"
