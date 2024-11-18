@@ -38,36 +38,36 @@ for folder in [UPLOAD_FOLDER, ANALYSIS_FOLDER, RESPONSES_FOLDER, OVERVIEWS_FOLDE
 # Get the Firebase credentials path from the environment
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-# firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-# firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 
-# Firebase Initialization
-FIREBASE_CREDENTIALS_PATH = "./pitchdeckclassifier-firebase-adminsdk-qonml-5a5054f4c1.json"
+# Firebase Initialization Local Mode
+# FIREBASE_CREDENTIALS_PATH = "./pitchdeckclassifier-firebase-adminsdk-qonml-5a5054f4c1.json"
 
-try:
-    # Load credentials and initialize Firebase
-    if os.path.exists(FIREBASE_CREDENTIALS_PATH):
-        cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Replace with your actual storage bucket
-        })
-        print("Firebase initialized successfully.")
-    else:
-        raise FileNotFoundError(f"Firebase credentials file not found at {FIREBASE_CREDENTIALS_PATH}")
-except Exception as e:
-    print(f"Failed to initialize Firebase: {e}")
-    raise
+# try:
+#     # Load credentials and initialize Firebase
+#     if os.path.exists(FIREBASE_CREDENTIALS_PATH):
+#         cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+#         firebase_admin.initialize_app(cred, {
+#             'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Replace with your actual storage bucket
+#         })
+#         print("Firebase initialized successfully.")
+#     else:
+#         raise FileNotFoundError(f"Firebase credentials file not found at {FIREBASE_CREDENTIALS_PATH}")
+# except Exception as e:
+#     print(f"Failed to initialize Firebase: {e}")
+#     raise
 
-# # Initialize Firebase
-# if firebase_creds_path and os.path.exists(firebase_creds_path):
-#     cred = credentials.Certificate(firebase_creds_path)
-#     firebase_admin.initialize_app(cred, {
-#         'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
-#     })
-# else:
-#     raise ValueError("Firebase credentials are missing.")
-# if not os.path.exists(firebase_creds_path):
-#     raise ValueError(f"Cannot access Firebase credentials file at {firebase_creds_path}")
+# Initialize Firebase Production Mode
+if firebase_creds_path and os.path.exists(firebase_creds_path):
+    cred = credentials.Certificate(firebase_creds_path)
+    firebase_admin.initialize_app(cred, {
+        'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
+    })
+else:
+    raise ValueError("Firebase credentials are missing.")
+if not os.path.exists(firebase_creds_path):
+    raise ValueError(f"Cannot access Firebase credentials file at {firebase_creds_path}")
 
 
 # Function to parse the overview text
