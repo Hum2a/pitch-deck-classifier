@@ -1,5 +1,6 @@
 import os
 import json  # Import the json module
+import firebase_admin
 import openai
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -9,16 +10,12 @@ import re
 import logging
 import shutil
 from urllib.parse import unquote
-import firebase_admin
-from firebase_admin import credentials, storage
+from firebase_admin import credentials, storage, initialize_app
 import tempfile
 from dotenv import load_dotenv
 import os
 
 load_dotenv()  # Load environment variables from .env file
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
-firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 
 app = Flask(__name__)
 CORS(app)
@@ -33,24 +30,45 @@ ANALYSIS_FOLDER_R2 = "./r2_analysis"
 RESPONSE_FOLDER_R2 = "./r2_response"
 LOCAL_SAVE_ENABLED = True  # Flag to control local saving
 
-firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-# Initialize Firebase
-if firebase_creds_path and os.path.exists(firebase_creds_path):
-    cred = credentials.Certificate(firebase_creds_path)
-    firebase_admin.initialize_app(cred, {
-        'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
-    })
-else:
-    raise ValueError("Firebase credentials are missing.")
-if not os.path.exists(firebase_creds_path):
-    raise ValueError(f"Cannot access Firebase credentials file at {firebase_creds_path}")
-
-
-
 # Create directories if they do not exist
 for folder in [UPLOAD_FOLDER, ANALYSIS_FOLDER, RESPONSES_FOLDER, OVERVIEWS_FOLDER, SUCCESSFUL_PITCHDECK_FOLDER, ANALYSIS_FOLDER_R2, RESPONSE_FOLDER_R2]:
     if not os.path.exists(folder):
         os.makedirs(folder)
+
+# Get the Firebase credentials path from the environment
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+# firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+# firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+
+# Firebase Initialization
+FIREBASE_CREDENTIALS_PATH = "./pitchdeckclassifier-firebase-adminsdk-qonml-5a5054f4c1.json"
+
+try:
+    # Load credentials and initialize Firebase
+    if os.path.exists(FIREBASE_CREDENTIALS_PATH):
+        cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Replace with your actual storage bucket
+        })
+        print("Firebase initialized successfully.")
+    else:
+        raise FileNotFoundError(f"Firebase credentials file not found at {FIREBASE_CREDENTIALS_PATH}")
+except Exception as e:
+    print(f"Failed to initialize Firebase: {e}")
+    raise
+
+# # Initialize Firebase
+# if firebase_creds_path and os.path.exists(firebase_creds_path):
+#     cred = credentials.Certificate(firebase_creds_path)
+#     firebase_admin.initialize_app(cred, {
+#         'storageBucket': 'pitchdeckclassifier.firebasestorage.app'  # Use the storage bucket from your Firebase project
+#     })
+# else:
+#     raise ValueError("Firebase credentials are missing.")
+# if not os.path.exists(firebase_creds_path):
+#     raise ValueError(f"Cannot access Firebase credentials file at {firebase_creds_path}")
+
 
 # Function to parse the overview text
 def parse_overview(text):
@@ -88,6 +106,7 @@ import json
 def upload_to_firebase(data, firebase_path, from_file=True):
     """
     Uploads JSON content to Firebase Storage.
+
     Parameters:
     - data: path to local file or dictionary of JSON content
     - firebase_path: the path in Firebase Storage
@@ -104,7 +123,7 @@ def upload_to_firebase(data, firebase_path, from_file=True):
                 return False
             blob.upload_from_filename(data)
         else:
-            # Create a temporary file to store JSON data
+            # Directly handle dictionary data
             with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_file:
                 json.dump(data, temp_file)
                 temp_file_path = temp_file.name
@@ -112,7 +131,7 @@ def upload_to_firebase(data, firebase_path, from_file=True):
             # Upload the temporary JSON file to Firebase
             blob.upload_from_filename(temp_file_path, content_type="application/json")
 
-            # Clean up the temporary file after upload
+            # Clean up the temporary file
             os.remove(temp_file_path)
 
         # Confirm upload
@@ -125,8 +144,6 @@ def upload_to_firebase(data, firebase_path, from_file=True):
     except Exception as e:
         logging.error(f"Failed to upload {firebase_path} to Firebase: {e}")
         return False
-
-
     
 def save_analysis_locally(parsed_detailed_analysis, analysis_filename):
     analysis_file_path = os.path.join(ANALYSIS_FOLDER, analysis_filename)
@@ -148,42 +165,113 @@ def save_analysis_locally(parsed_detailed_analysis, analysis_filename):
         logging.error(f"Error saving analysis locally: {e}")
         return None
     
+# def analyze_and_upload(filename):
+#     try:
+#         # Assuming parsed_detailed_analysis contains the analysis data
+#         parsed_detailed_analysis = get_detailed_analysis_data()  # Hypothetical function call
+#         analysis_filename = f"{filename.split('.')[0]}_analysis.json"
+        
+#         # Step 1: Save locally
+#         local_analysis_path = save_analysis_locally(parsed_detailed_analysis, analysis_filename)
+        
+#         if local_analysis_path:
+#             # Step 2: Upload to Firebase
+#             firebase_path = f"analyses/{analysis_filename}"
+#             if not upload_to_firebase(local_analysis_path, firebase_path):
+#                 logging.error(f"Failed to upload {analysis_filename} to Firebase.")
+#             else:
+#                 logging.info(f"{analysis_filename} successfully uploaded to Firebase.")
+#         else:
+#             logging.error(f"Skipping upload as local file {analysis_filename} was not created properly.")
+#     except Exception as e:
+#         logging.error(f"Error in analyze_and_upload for {filename}: {e}")
+
 def analyze_and_upload(filename):
     try:
-        # Assuming parsed_detailed_analysis contains the analysis data
+        # Extract base filenames
+        filenames = generate_analysis_filenames(filename)
+
+        # Assume parsed_detailed_analysis is the analysis data as a dictionary
         parsed_detailed_analysis = get_detailed_analysis_data()  # Hypothetical function call
-        analysis_filename = f"{filename.split('.')[0]}_analysis.json"
-        
-        # Step 1: Save locally
-        local_analysis_path = save_analysis_locally(parsed_detailed_analysis, analysis_filename)
-        
-        if local_analysis_path:
-            # Step 2: Upload to Firebase
-            firebase_path = f"analyses/{analysis_filename}"
-            if not upload_to_firebase(local_analysis_path, firebase_path):
-                logging.error(f"Failed to upload {analysis_filename} to Firebase.")
-            else:
-                logging.info(f"{analysis_filename} successfully uploaded to Firebase.")
+        firebase_path = f"analyses/{filenames['analysis']}"
+
+        # Directly upload parsed analysis to Firebase
+        if upload_to_firebase(parsed_detailed_analysis, firebase_path, from_file=False):
+            logging.info(f"Uploaded analysis for {filename} to Firebase successfully.")
         else:
-            logging.error(f"Skipping upload as local file {analysis_filename} was not created properly.")
+            logging.error(f"Failed to upload analysis for {filename} to Firebase.")
     except Exception as e:
         logging.error(f"Error in analyze_and_upload for {filename}: {e}")
+
+def get_base_filename(filename):
+    """
+    Extract the base filename without the extension, considering multiple periods in the name.
+    Example: "OLEC pitchdeck 09.2024.pdf" -> "OLEC pitchdeck 09.2024"
+    """
+    base_name, ext = os.path.splitext(filename)
+    return base_name
+
+def generate_analysis_filenames(filename):
+    """
+    Generate consistent filenames for analysis, overview, and response JSON files
+    while preserving periods in the base name.
+    """
+    base_name = get_base_filename(filename)  # Extract base name
+    analysis_filename = f"{base_name}_analysis.json"
+    overview_filename = f"{base_name}_overview.json"
+    response_filename = f"{base_name}_response.json"
+
+    return {
+        "analysis": analysis_filename,
+        "overview": overview_filename,
+        "response": response_filename,
+    }
+
+def test_firebase_bucket():
+    try:
+        bucket = storage.bucket()
+        logging.info(f"Successfully accessed Firebase bucket: {bucket.name}")
+        return bucket
+    except Exception as e:
+        logging.error(f"Failed to access Firebase bucket: {e}")
+        return None
+
+def list_firebase_files():
+    try:
+        bucket = storage.bucket()
+        blobs = bucket.list_blobs(prefix="uploads/")  # Adjust the prefix to match your storage structure
+        files = [blob.name for blob in blobs]
+        logging.info(f"Files in 'uploads/': {files}")
+        return files
+    except Exception as e:
+        logging.error(f"Error listing files in Firebase Storage: {e}")
+        return []
+    
+logging.info("Checking files in Firebase Storage...")
+firebase_files = list_firebase_files()
 
 
 # Helper function to download Firebase file to a temporary location
 def download_firebase_file(filename):
     try:
         bucket = storage.bucket()
+        logging.info(f"Attempting to download file: uploads/{filename} from Firebase Storage.")
         blob = bucket.blob(f"uploads/{filename}")
+
+        if not blob.exists():
+            logging.error(f"File 'uploads/{filename}' does not exist in Firebase Storage.")
+            return None
         
         # Create a temporary file to store the downloaded content
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         blob.download_to_filename(temp_file.name)
+        logging.info(f"Successfully downloaded file: {temp_file.name}")
         return temp_file.name
     except Exception as e:
         logging.error(f"Error downloading file from Firebase: {e}")
         return None
-    
+
+
 # Helper function to download a Round 2 file from "successful_pitchdecks" folder in Firebase to a temporary location    
 def download_round_2_file(filename):
     try:
@@ -554,68 +642,71 @@ def analyze_pitch_deck_firebase():
     try:
         data = request.get_json()
         filename = data.get("filename")
-        
+        logging.info(f"Received request to analyze file: {filename}")
+
         if not filename:
+            logging.error("Filename not provided in request.")
             return jsonify({"error": "Filename is required"}), 400
 
-        # Download file from Firebase
+        # Attempt to download the file
         file_path = download_firebase_file(filename)
         if not file_path:
+            logging.error(f"Failed to download file: {filename} from Firebase.")
             return jsonify({"error": "Failed to download file from Firebase"}), 404
 
         # Extract text from the downloaded PDF
         text = extract_text(file_path)
 
+        # Generate filenames for analysis, overview, and response JSONs
+        filenames = generate_analysis_filenames(filename)
+
         # Step 1: Extract overview
         overview_text = get_overview(text)
-        overview_filename = f"{filename.split('.')[0]}_overview.json"
-        overview_path = os.path.join(OVERVIEWS_FOLDER, overview_filename)
+        overview_path = os.path.join(OVERVIEWS_FOLDER, filenames["overview"])
         with open(overview_path, "w") as file:
             json.dump({"Overview": overview_text}, file, indent=4)
 
         # Upload overview to Firebase and log status
-        if not upload_to_firebase(overview_path, f"overviews/{overview_filename}"):
-            logging.warning(f"Failed to upload overview file {overview_filename} to Firebase.")
+        if not upload_to_firebase(overview_path, f"overviews/{filenames['overview']}"):
+            logging.warning(f"Failed to upload overview file {filenames['overview']} to Firebase.")
 
         # Step 2: Extract detailed analysis
         detailed_analysis_text = get_detailed_analysis(text)
-        analysis_filename = f"{filename.split('.')[0]}_analysis.json"
-        analysis_path = os.path.join(ANALYSIS_FOLDER, analysis_filename)
+        analysis_path = os.path.join(ANALYSIS_FOLDER, filenames["analysis"])
         with open(analysis_path, "w") as file:
             json.dump({"DetailedAnalysis": detailed_analysis_text}, file, indent=4)
 
         # Upload detailed analysis to Firebase and log status
-        if not upload_to_firebase(analysis_path, f"analyses/{analysis_filename}"):
-            logging.warning(f"Failed to upload analysis file {analysis_filename} to Firebase.")
+        if not upload_to_firebase(analysis_path, f"analyses/{filenames['analysis']}"):
+            logging.warning(f"Failed to upload analysis file {filenames['analysis']} to Firebase.")
 
         # Full API response storage
         response_data = {
             "Overview": overview_text,
             "DetailedAnalysis": detailed_analysis_text
         }
-        response_filename = f"{filename.split('.')[0]}_response.json"
-        response_path = os.path.join(RESPONSES_FOLDER, response_filename)
+        response_path = os.path.join(RESPONSES_FOLDER, filenames["response"])
         with open(response_path, "w") as file:
             json.dump(response_data, file, indent=4)
 
         # Upload response data to Firebase and log status
-        if not upload_to_firebase(response_path, f"responses/{response_filename}"):
-            logging.warning(f"Failed to upload response file {response_filename} to Firebase.")
+        if not upload_to_firebase(response_path, f"responses/{filenames['response']}"):
+            logging.warning(f"Failed to upload response file {filenames['response']} to Firebase.")
 
         # Clean up the temporary file after analysis
         os.remove(file_path)
 
         return jsonify({
             "message": "Analysis complete",
-            "overview_file": overview_filename,
-            "analysis_file": analysis_filename,
-            "response_file": response_filename
+            "overview_file": filenames["overview"],
+            "analysis_file": filenames["analysis"],
+            "response_file": filenames["response"]
         }), 200
 
     except Exception as e:
         logging.error(f"Error during analysis: {e}")
         return jsonify({"error": str(e)}), 500
-    
+   
 @app.route('/api/sync_check', methods=['GET'])
 def sync_check():
     try:
@@ -1090,7 +1181,7 @@ def get_round_two_analysis(text):
         | Product/Technology     | TRL Level: Is the Technology Readiness Level (TRL) above 3?                             | ""           | ""                                                                          |
         ```
 
-        Only include the JSON array as shown, with no additional text, comments, or formatting.
+        Only return the JSON array. Do not include any additional text, comments, or formatting.
         **Text to evaluate**: {text}
         """
     try:
@@ -1108,12 +1199,25 @@ def get_round_two_analysis(text):
         return None
 
 # Function to parse JSON from OpenAI response
+import json
+
 def parse_analysis(analysis_text):
     try:
+        # Clean up the response (e.g., remove unexpected characters or extra text)
+        analysis_text = analysis_text.strip()
+
+        # Ensure it starts and ends with a JSON array structure
+        if not (analysis_text.startswith("[") and analysis_text.endswith("]")):
+            logging.warning("Response does not look like valid JSON. Attempting cleanup.")
+            analysis_text = analysis_text[analysis_text.find("[") : analysis_text.rfind("]") + 1]
+
+        # Parse the cleaned JSON
         return json.loads(analysis_text)
     except json.JSONDecodeError as e:
-        logging.error(f"Error parsing analysis response: {e}")
+        logging.error(f"Error parsing JSON: {e}")
+        logging.debug(f"Raw analysis text: {analysis_text}")  # Log raw response for debugging
         return None
+
     
 # Save analysis locally
 def save_locally(data, folder, filename):
@@ -1171,41 +1275,35 @@ def round_two_analysis():
     parsed_analysis = parse_analysis(analysis_text)
     if not parsed_analysis:
         logging.error("Failed to parse analysis response.")
-        return jsonify({"error": "Failed to parse analysis"}), 500
+        return jsonify({"error": "Failed to parse analysis response. Check server logs for details."}), 500
 
     # Step 5: Define filenames for analysis and response
     analysis_filename = f"{filename.split('.')[0]}_r2_analysis.json"
     response_filename = f"{filename.split('.')[0]}_r2_response.json"
 
     # Step 6: Save parsed analysis locally
-    analysis_local_path = None
-    if LOCAL_SAVE_ENABLED:
-        analysis_local_path = save_locally(parsed_analysis, ANALYSIS_FOLDER_R2, analysis_filename)
-        if analysis_local_path:
-            logging.info(f"Analysis successfully saved locally at {analysis_local_path}")
-        else:
-            logging.error("Failed to save analysis locally.")
+    analysis_local_path = save_locally(parsed_analysis, ANALYSIS_FOLDER_R2, analysis_filename)
+    if not analysis_local_path:
+        logging.error("Failed to save analysis locally.")
+        return jsonify({"error": "Failed to save analysis locally."}), 500
 
     # Step 7: Save raw response locally
-    response_local_path = None
-    if LOCAL_SAVE_ENABLED:
-        response_local_path = save_locally(analysis_text, RESPONSE_FOLDER_R2, response_filename)
-        if response_local_path:
-            logging.info(f"Response successfully saved locally at {response_local_path}")
-        else:
-            logging.error("Failed to save response locally.")
+    response_local_path = save_locally(analysis_text, RESPONSE_FOLDER_R2, response_filename)
+    if not response_local_path:
+        logging.error("Failed to save raw response locally.")
+        return jsonify({"error": "Failed to save raw response locally."}), 500
 
-    # Step 8: Upload parsed analysis to Firebase if local save was successful
-    if analysis_local_path and not upload_to_firebase(analysis_local_path, f"r2_analysis/{analysis_filename}"):
+    # Step 8: Upload parsed analysis to Firebase
+    if not upload_to_firebase(analysis_local_path, f"r2_analysis/{analysis_filename}"):
         logging.error(f"Failed to upload parsed analysis for {filename} to Firebase.")
         return jsonify({"error": "Failed to upload parsed analysis"}), 500
 
-    # Step 9: Upload raw response to Firebase if local save was successful
-    if response_local_path and not upload_to_firebase(response_local_path, f"r2_responses/{response_filename}"):
+    # Step 9: Upload raw response to Firebase
+    if not upload_to_firebase(response_local_path, f"r2_responses/{response_filename}"):
         logging.error(f"Failed to upload raw response for {filename} to Firebase.")
         return jsonify({"error": "Failed to upload raw response"}), 500
 
-    # Return success message with the parsed analysis data
+    # Return success message
     return jsonify({"DetailedAnalysis": parsed_analysis}), 200
 
 if __name__ == "__main__":
